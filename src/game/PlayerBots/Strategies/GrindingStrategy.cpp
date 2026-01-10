@@ -10,7 +10,6 @@
 #include "Player.h"
 #include "Creature.h"
 #include "MotionMaster.h"
-#include "Log.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "CellImpl.h"
@@ -53,21 +52,11 @@ bool GrindingStrategy::Update(Player* pBot, uint32 /*diff*/)
     Creature* pTarget = FindGrindTarget(pBot, SEARCH_RANGE);
     if (pTarget)
     {
-        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[GrindingStrategy] %s found target: %s (level %u)",
-            pBot->GetName(), pTarget->GetName(), pTarget->GetLevel());
-
         // Attack the mob
         if (pBot->Attack(pTarget, true))
         {
-            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[GrindingStrategy] %s attacking %s",
-                pBot->GetName(), pTarget->GetName());
             pBot->GetMotionMaster()->MoveChase(pTarget);
             return true;
-        }
-        else
-        {
-            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[GrindingStrategy] %s FAILED to attack %s",
-                pBot->GetName(), pTarget->GetName());
         }
     }
 
@@ -114,6 +103,10 @@ bool GrindingStrategy::IsValidGrindTarget(Player* pBot, Creature* pCreature) con
     if (pCreature->IsInEvadeMode())
         return false;
 
+    // Skip mobs already tapped by others
+    if (pCreature->HasLootRecipient() && !pCreature->IsTappedBy(pBot))
+        return false;
+
     // Must be visible to us
     if (!pCreature->IsVisibleForOrDetect(pBot, pBot, false))
         return false;
@@ -138,9 +131,6 @@ Creature* GrindingStrategy::FindGrindTarget(Player* pBot, float range)
     AllCreaturesInRange check(pBot, range);
     MaNGOS::CreatureListSearcher<AllCreaturesInRange> searcher(creatures, check);
     Cell::VisitGridObjects(pBot, searcher, range);
-
-    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[GrindingStrategy] %s searching for targets, found %zu creatures in %.0f yard range",
-        pBot->GetName(), creatures.size(), range);
 
     Creature* pBestTarget = nullptr;
     float bestDistance = range + 1.0f;

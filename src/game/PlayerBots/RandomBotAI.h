@@ -11,6 +11,7 @@
 #define MANGOS_RANDOMBOTAI_H
 
 #include "CombatBotBaseAI.h"
+#include "Strategies/LootingBehavior.h"
 #include <memory>
 
 class IBotStrategy;
@@ -29,6 +30,9 @@ public:
     // Combat AI - required by CombatBotBaseAI
     void UpdateInCombatAI() override;
     void UpdateOutOfCombatAI() override;
+
+    // Reset behaviors (call on death, etc.)
+    void ResetBehaviors();
 
     // Class-specific combat routines
     void UpdateInCombatAI_Paladin() override;
@@ -56,6 +60,10 @@ private:
 
     // Strategy for high-level behavior (grinding, resting, etc.)
     std::unique_ptr<IBotStrategy> m_strategy;
+
+    // Universal behaviors (run regardless of strategy)
+    LootingBehavior m_looting;
+    bool m_wasInCombat = false;
 };
 
 #endif // MANGOS_RANDOMBOTAI_H

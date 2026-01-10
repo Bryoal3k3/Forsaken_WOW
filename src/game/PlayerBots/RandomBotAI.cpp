@@ -116,19 +116,41 @@ void RandomBotAI::UpdateAI(uint32 const diff)
         return;
     }
 
-    // Dead? Just wait for now (future phases will handle respawning)
+    // Dead? Reset behaviors and wait (future phases will handle respawning)
     if (!me->IsAlive())
+    {
+        ResetBehaviors();
         return;
+    }
+
+    // Track combat state transitions
+    bool inCombat = me->IsInCombat();
+    if (m_wasInCombat && !inCombat)
+    {
+        // Just left combat - trigger looting
+        m_looting.OnCombatEnded(me);
+    }
+    m_wasInCombat = inCombat;
 
     // Combat logic
-    if (me->IsInCombat() && me->GetVictim())
+    if (inCombat && me->GetVictim())
     {
         UpdateInCombatAI();
     }
     else
     {
+        // Let looting run first (universal behavior)
+        if (m_looting.Update(me, diff))
+            return;  // Busy looting
+
         UpdateOutOfCombatAI();
     }
+}
+
+void RandomBotAI::ResetBehaviors()
+{
+    m_looting.Reset();
+    m_wasInCombat = false;
 }
 
 // ============================================================================

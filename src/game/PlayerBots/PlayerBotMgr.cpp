@@ -17,6 +17,7 @@
 #include "MapManager.h"
 #include "Language.h"
 #include "Spell.h"
+#include "RandomBotGenerator.h"
 
 INSTANTIATE_SINGLETON_1(PlayerBotMgr);
 
@@ -72,6 +73,12 @@ void PlayerBotMgr::Load()
 
     // 2- Configuration
     LoadConfig();
+
+    // 2.5- Auto-generate RandomBots if needed (first launch with RandomBot.Enable=1)
+    if (m_confEnableRandomBots)
+    {
+        sRandomBotGenerator.GenerateIfNeeded(m_confMaxRandomBots);
+    }
 
     // 3- Load usable account ID
     std::unique_ptr<QueryResult> result = LoginDatabase.PQuery(

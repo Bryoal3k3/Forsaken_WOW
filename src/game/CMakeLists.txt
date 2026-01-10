@@ -196,6 +196,9 @@ set (game_SRCS
     PlayerBots/BattleBotWaypoints.cpp
     PlayerBots/PlayerBotAI.cpp
     PlayerBots/PlayerBotMgr.cpp
+    PlayerBots/RandomBotAI.cpp
+    PlayerBots/RandomBotGenerator.cpp
+    PlayerBots/Strategies/GrindingStrategy.cpp
     Protocol/Opcodes.cpp
     Protocol/WorldSocket.h
     Protocol/WorldSocket.cpp
@@ -421,6 +424,10 @@ set (game_SRCS
     PlayerBots/BattleBotWaypoints.h
     PlayerBots/PlayerBotAI.h
     PlayerBots/PlayerBotMgr.h
+    PlayerBots/RandomBotAI.h
+    PlayerBots/RandomBotGenerator.h
+    PlayerBots/Strategies/IBotStrategy.h
+    PlayerBots/Strategies/GrindingStrategy.h
     Protocol/Opcodes.h
     Spells/Spell.h
     Spells/SpellAuraDefines.h
@@ -504,6 +511,7 @@ include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/OutdoorPvP
   ${CMAKE_CURRENT_SOURCE_DIR}/PacketBroadcast
   ${CMAKE_CURRENT_SOURCE_DIR}/PlayerBots
+  ${CMAKE_CURRENT_SOURCE_DIR}/PlayerBots/Strategies
   ${CMAKE_CURRENT_SOURCE_DIR}/Protocol
   ${CMAKE_CURRENT_SOURCE_DIR}/Spells
   ${CMAKE_CURRENT_SOURCE_DIR}/Threat

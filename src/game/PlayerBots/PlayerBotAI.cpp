@@ -16,6 +16,7 @@
 
 #include "PlayerBotMgr.h"
 #include "PlayerBotAI.h"
+#include "RandomBotAI.h"
 #include "Player.h"
 #include "Log.h"
 #include "SocialMgr.h"
@@ -360,6 +361,8 @@ void PopulateAreaBotAI::OnPlayerLogin()
 
 PlayerBotAI* CreatePlayerBotAI(std::string ainame)
 {
+    if (ainame == "RandomBotAI")
+        return new RandomBotAI();
     if (ainame == "MageOrgrimmarAttackerAI")
         return new MageOrgrimmarAttackerAI();
     if (ainame == "IronforgePopulationAI")

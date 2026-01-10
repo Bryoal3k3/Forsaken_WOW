@@ -9,9 +9,12 @@
 
 #include "RandomBotAI.h"
 #include "Strategies/GrindingStrategy.h"
+#include "Strategies/GhostWalkingStrategy.h"
 #include "Player.h"
 #include "Creature.h"
+#include "Corpse.h"
 #include "ObjectMgr.h"
+#include "ObjectAccessor.h"
 #include "PlayerBotMgr.h"
 #include "WorldSession.h"
 #include "World.h"
@@ -29,6 +32,7 @@
 RandomBotAI::RandomBotAI()
     : CombatBotBaseAI()
     , m_strategy(std::make_unique<GrindingStrategy>())
+    , m_ghostStrategy(std::make_unique<GhostWalkingStrategy>())
 {
     m_updateTimer.Reset(1000);
 }
@@ -116,10 +120,10 @@ void RandomBotAI::UpdateAI(uint32 const diff)
         return;
     }
 
-    // Dead? Reset behaviors and wait (future phases will handle respawning)
+    // Dead? Use ghost walking strategy
     if (!me->IsAlive())
     {
-        ResetBehaviors();
+        m_ghostStrategy->Update(me, RB_UPDATE_INTERVAL);
         return;
     }
 
@@ -131,6 +135,11 @@ void RandomBotAI::UpdateAI(uint32 const diff)
         m_looting.OnCombatEnded(me);
     }
     m_wasInCombat = inCombat;
+
+    // Handle resting (cheat: no food/drink items needed)
+    // This must be checked early - if combat starts while resting, bot stands up
+    if (BotCheats::HandleResting(me, RB_UPDATE_INTERVAL, m_isResting, m_restingTickTimer))
+        return;  // Busy resting
 
     // Combat logic
     if (inCombat && me->GetVictim())
@@ -151,6 +160,8 @@ void RandomBotAI::ResetBehaviors()
 {
     m_looting.Reset();
     m_wasInCombat = false;
+    m_isResting = false;
+    m_restingTickTimer = 0;
 }
 
 // ============================================================================

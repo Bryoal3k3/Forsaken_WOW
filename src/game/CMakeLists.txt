@@ -198,7 +198,9 @@ set (game_SRCS
     PlayerBots/PlayerBotMgr.cpp
     PlayerBots/RandomBotAI.cpp
     PlayerBots/RandomBotGenerator.cpp
+    PlayerBots/BotCheats.cpp
     PlayerBots/Strategies/GrindingStrategy.cpp
+    PlayerBots/Strategies/GhostWalkingStrategy.cpp
     PlayerBots/Strategies/LootingBehavior.cpp
     Protocol/Opcodes.cpp
     Protocol/WorldSocket.h
@@ -427,8 +429,10 @@ set (game_SRCS
     PlayerBots/PlayerBotMgr.h
     PlayerBots/RandomBotAI.h
     PlayerBots/RandomBotGenerator.h
+    PlayerBots/BotCheats.h
     PlayerBots/Strategies/IBotStrategy.h
     PlayerBots/Strategies/GrindingStrategy.h
+    PlayerBots/Strategies/GhostWalkingStrategy.h
     PlayerBots/Strategies/LootingBehavior.h
     Protocol/Opcodes.h
     Spells/Spell.h

@@ -12,9 +12,11 @@
 
 #include "CombatBotBaseAI.h"
 #include "Strategies/LootingBehavior.h"
+#include "BotCheats.h"
 #include <memory>
 
 class IBotStrategy;
+class GhostWalkingStrategy;
 
 class RandomBotAI : public CombatBotBaseAI
 {
@@ -64,6 +66,13 @@ private:
     // Universal behaviors (run regardless of strategy)
     LootingBehavior m_looting;
     bool m_wasInCombat = false;
+
+    // Resting state (for BotCheats::HandleResting)
+    bool m_isResting = false;
+    uint32 m_restingTickTimer = 0;
+
+    // Death handling strategy
+    std::unique_ptr<GhostWalkingStrategy> m_ghostStrategy;
 };
 
 #endif // MANGOS_RANDOMBOTAI_H

@@ -17,6 +17,7 @@
 
 class IBotStrategy;
 class GhostWalkingStrategy;
+class VendoringStrategy;
 
 class RandomBotAI : public CombatBotBaseAI
 {
@@ -73,6 +74,9 @@ private:
 
     // Death handling strategy
     std::unique_ptr<GhostWalkingStrategy> m_ghostStrategy;
+
+    // Vendoring strategy
+    std::unique_ptr<VendoringStrategy> m_vendoringStrategy;
 };
 
 #endif // MANGOS_RANDOMBOTAI_H

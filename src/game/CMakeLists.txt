@@ -201,6 +201,7 @@ set (game_SRCS
     PlayerBots/BotCheats.cpp
     PlayerBots/Strategies/GrindingStrategy.cpp
     PlayerBots/Strategies/GhostWalkingStrategy.cpp
+    PlayerBots/Strategies/VendoringStrategy.cpp
     PlayerBots/Strategies/LootingBehavior.cpp
     Protocol/Opcodes.cpp
     Protocol/WorldSocket.h
@@ -433,6 +434,7 @@ set (game_SRCS
     PlayerBots/Strategies/IBotStrategy.h
     PlayerBots/Strategies/GrindingStrategy.h
     PlayerBots/Strategies/GhostWalkingStrategy.h
+    PlayerBots/Strategies/VendoringStrategy.h
     PlayerBots/Strategies/LootingBehavior.h
     Protocol/Opcodes.h
     Spells/Spell.h

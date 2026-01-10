@@ -10,6 +10,7 @@
 #include "RandomBotAI.h"
 #include "Strategies/GrindingStrategy.h"
 #include "Strategies/GhostWalkingStrategy.h"
+#include "Strategies/VendoringStrategy.h"
 #include "Player.h"
 #include "Creature.h"
 #include "Corpse.h"
@@ -33,6 +34,7 @@ RandomBotAI::RandomBotAI()
     : CombatBotBaseAI()
     , m_strategy(std::make_unique<GrindingStrategy>())
     , m_ghostStrategy(std::make_unique<GhostWalkingStrategy>())
+    , m_vendoringStrategy(std::make_unique<VendoringStrategy>())
 {
     m_updateTimer.Reset(1000);
 }
@@ -239,6 +241,11 @@ void RandomBotAI::UpdateOutOfCombatAI()
             return;
         }
     }
+
+    // Check vendoring - bags full or gear broken?
+    // This runs before grinding so bots don't keep trying to loot with full bags
+    if (m_vendoringStrategy && m_vendoringStrategy->Update(me, RB_UPDATE_INTERVAL))
+        return;  // Busy vendoring
 
     // Delegate to strategy for high-level behavior (finding targets, etc.)
     if (m_strategy && m_strategy->Update(me, 0))

@@ -1,6 +1,6 @@
 # RandomBot AI Development Progress
 
-## Project Status: Phase 3 COMPLETE
+## Project Status: Phase 4 COMPLETE
 
 | Phase | Status | Description |
 |-------|--------|-------------|
@@ -8,7 +8,7 @@
 | Phase 1 | ✅ Complete | Combat AI - bots fight when attacked |
 | Phase 2 | ✅ Complete | Grinding - find mobs, kill, loot, rest |
 | Phase 3 | ✅ Complete | Death handling and respawn |
-| Phase 4 | 📋 Planned | Vendoring - sell junk, repair |
+| Phase 4 | ✅ Complete | Vendoring - sell items, repair gear |
 | Phase 5 | 📋 Planned | Movement - exploration, travel |
 
 ---
@@ -24,11 +24,66 @@
 6. Skip mobs already tapped by other players/bots
 7. Loot corpses after combat (gold + items)
 8. Rest when low HP/mana (sit + cheat regen, no consumables needed)
-9. **NEW:** Handle death - release spirit, ghost walk to corpse, resurrect
-10. **NEW:** Death loop detection - use spirit healer if dying too often
+9. Handle death - release spirit, ghost walk to corpse, resurrect
+10. Death loop detection - use spirit healer if dying too often
+11. **NEW:** Vendor when bags full or gear broken - walk to nearest vendor
+12. **NEW:** Sell all items and repair gear at vendor
 
 **What bots CANNOT do yet:**
-- Sell junk or repair
+- Travel/explore to find new grinding areas (stuck at vendor location after vendoring)
+
+---
+
+## Phase 4: Vendoring - ✅ COMPLETE
+
+### What Works
+- Bot detects when bags are full (no free slots) or gear is broken (durability = 0)
+- Vendor cache built at startup from creature spawn data (933 vendors, 305 can repair)
+- Bot finds nearest friendly vendor that can repair (faction-aware)
+- Bot walks to vendor location
+- Sells all items with sell price > 0
+- Repairs all gear using `DurabilityRepairAll()`
+- Debug logging shows vendoring decisions and progress
+
+### Known Limitations (Phase 5 will address)
+- Simple `MovePoint()` pathfinding - bot may float over terrain
+- After vendoring, bot stuck at town with no grind targets nearby
+- Need exploration/travel to return to grinding areas
+
+### Architecture
+```
+src/game/PlayerBots/Strategies/
+└── VendoringStrategy.h/cpp  ← Vendoring behavior
+```
+
+### Key Technical Solutions
+
+**Vendor Cache:**
+- Built once at first use using `sObjectMgr.DoCreatureData()`
+- Iterates all creature spawns in memory (no runtime SQL)
+- Filters by `UNIT_NPC_FLAG_VENDOR` and `UNIT_NPC_FLAG_REPAIR`
+- Stores position, entry, guid, map, canRepair for each vendor
+
+**Faction Filtering:**
+- Uses `FactionTemplateEntry::IsHostileTo()` to check faction compatibility
+- Bot only goes to vendors friendly to their faction (Alliance/Horde)
+
+**State Machine:**
+- `IDLE` → `FINDING_VENDOR` → `WALKING_TO_VENDOR` → `AT_VENDOR` → `DONE`
+- Stuck detection: 30 second timeout, progress check every 3 seconds
+- Aborts vendoring if bot enters combat while walking
+
+### Files Created
+| File | Purpose |
+|------|---------|
+| `Strategies/VendoringStrategy.h/cpp` | Vendoring state machine and logic |
+
+### Files Modified
+| File | Change |
+|------|--------|
+| `RandomBotAI.h` | Added VendoringStrategy member |
+| `RandomBotAI.cpp` | Integrated vendoring into UpdateOutOfCombatAI() |
+| `CMakeLists.txt` | Added VendoringStrategy files |
 
 ---
 
@@ -193,6 +248,16 @@ On first launch with `RandomBot.Enable=1` and empty playerbot table:
 
 ## Session Log
 
+### 2025-01-10 - Phase 4 COMPLETE (Vendoring)
+- Created VendoringStrategy with state machine
+- Vendor cache built from creature spawn data (933 vendors, 305 can repair)
+- Faction-aware vendor finding (Alliance/Horde)
+- Bot walks to vendor, sells all items, repairs gear
+- **TESTED**: Bot detects full bags, walks to vendor, sells items repeatedly
+- Known issue: pathfinding uses simple MovePoint (may float over terrain)
+- Known issue: bot stuck at town after vendoring (needs Phase 5 exploration)
+- Phase 4 complete! Next: Phase 5 (movement/exploration)
+
 ### 2025-01-10 - Phase 3 COMPLETE (Death Handling)
 - Created GhostWalkingStrategy for death handling
 - Bot releases spirit, teleports to graveyard, walks back to corpse
@@ -234,7 +299,10 @@ On first launch with `RandomBot.Enable=1` and empty playerbot table:
 | Location | Purpose |
 |----------|---------|
 | `RandomBotAI::UpdateAI()` | Main update loop (death, resting, combat, looting) |
-| `RandomBotAI::UpdateOutOfCombatAI()` | Delegates to strategy |
+| `RandomBotAI::UpdateOutOfCombatAI()` | Delegates to vendoring/grinding strategy |
+| `VendoringStrategy::Update()` | Walk to vendor, sell, repair |
+| `VendoringStrategy::NeedsToVendor()` | Check bags full or gear broken |
+| `VendoringStrategy::BuildVendorCache()` | Build vendor location cache at startup |
 | `GhostWalkingStrategy::Update()` | Ghost walk to corpse and resurrect |
 | `GhostWalkingStrategy::OnDeath()` | Release spirit, handle death loop |
 | `BotCheats::HandleResting()` | Sit and regen HP/mana (cheat) |
@@ -282,4 +350,4 @@ WHERE p.ai = 'RandomBotAI' LIMIT 10;
 ---
 
 *Last Updated: 2025-01-10*
-*Current State: Phase 3 complete! Bots grind, loot, rest, and handle death autonomously. Next: Phase 4 (vendoring).*
+*Current State: Phase 4 complete! Bots grind, loot, rest, handle death, and vendor autonomously. Next: Phase 5 (movement/exploration).*

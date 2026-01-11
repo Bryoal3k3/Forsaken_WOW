@@ -17,7 +17,12 @@
 
 ### Issues Fixed
 
-**1. GUID Conflict Bug**
+**1. Horde Bots Not Attacking (Orc, Tauren, Troll)**
+- **Problem**: Horde bots (Orc, Tauren, Troll) would spawn but stand idle, never attacking mobs. Alliance bots and Night Elf worked fine.
+- **Root Cause**: The mob search range (50 yards) was too small. Horde starting areas (Valley of Trials, Red Cloud Mesa) have hostile mobs spawned further from the spawn point than Alliance areas. The search only found friendly NPCs (trainers, quest givers).
+- **Fix**: Increased `SEARCH_RANGE` from 50.0f to 150.0f in `GrindingStrategy.h`.
+
+**2. GUID Conflict Bug**
 - **Problem**: When user created characters, they would overwrite bot characters because both used GUID 1, 2, 3, etc.
 - **Root Cause**: `RandomBotGenerator::GetNextFreeCharacterGuid()` queried DB directly but didn't update `ObjectMgr.m_CharGuids` counter. When player created character, `GeneratePlayerLowGuid()` returned conflicting GUID.
 - **Fix**: Changed `RandomBotGenerator::GenerateRandomBots()` to use `sObjectMgr.GeneratePlayerLowGuid()` instead of manual GUID calculation. This keeps the GUID counter in sync.
@@ -45,6 +50,7 @@
 
 | File | Changes |
 |------|---------|
+| `GrindingStrategy.h` | Increased `SEARCH_RANGE` from 50.0f to 150.0f |
 | `PlayerBotMgr.h` | Added `m_confPurgeRandomBots` member |
 | `PlayerBotMgr.cpp` | Added purge config loading, purge call in Load(), vendor cache call, fixed bot loading to use real account IDs |
 | `RandomBotGenerator.h` | Added `PurgeAllRandomBots()` declaration |
@@ -174,6 +180,10 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2025-01-11 - Horde Bot Fix
+- Fixed Orc, Tauren, Troll bots standing idle - increased mob search range from 50 to 150 yards
+- Horde starting areas have mobs further from spawn point than Alliance areas
+
 ### 2025-01-11 - Critical Bug Fixes
 - Fixed GUID conflict: bots now use `sObjectMgr.GeneratePlayerLowGuid()`
 - Fixed account ID corruption: `SaveToDB()` preserves real account ID for bots
@@ -201,4 +211,4 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 *Last Updated: 2025-01-11*
-*Current State: Phase 4 complete with critical bug fixes. Bots grind, loot, rest, handle death, vendor, and persist correctly across restarts. Next: Phase 5 (movement/exploration).*
+*Current State: Phase 4 complete. All races (Alliance + Horde) now work correctly. Bots grind, loot, rest, handle death, vendor, and persist correctly across restarts. Next: Phase 5 (movement/exploration).*

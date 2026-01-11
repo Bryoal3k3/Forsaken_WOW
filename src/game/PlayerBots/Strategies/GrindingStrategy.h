@@ -31,7 +31,7 @@ private:
     bool IsValidGrindTarget(Player* pBot, Creature* pCreature) const;
 
     // Configuration
-    static constexpr float SEARCH_RANGE = 50.0f;
+    static constexpr float SEARCH_RANGE = 150.0f;  // Search radius for finding mobs
     static constexpr int32 LEVEL_RANGE = 2;  // Bot level +/- this value
 };
 

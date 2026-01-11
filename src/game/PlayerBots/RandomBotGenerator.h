@@ -25,6 +25,10 @@ public:
     // Checks if generation is needed and performs it if so
     void GenerateIfNeeded(uint32 maxBots);
 
+    // Purge all RandomBots - completely removes all bot accounts, characters, and related data
+    // Called during startup if RandomBot.Purge config is enabled
+    void PurgeAllRandomBots();
+
     // Check functions
     bool IsPlayerbotTableEmpty();
     bool HasRandomBotAccounts();

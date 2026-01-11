@@ -13,6 +13,8 @@
 #include "World.h"
 #include "Log.h"
 #include "SharedDefines.h"
+#include "Player.h"
+#include "ProgressBar.h"
 
 RandomBotGenerator& RandomBotGenerator::Instance()
 {
@@ -87,6 +89,86 @@ bool RandomBotGenerator::HasRandomBotAccounts()
     return result->Fetch()[0].GetUInt32() > 0;
 }
 
+void RandomBotGenerator::PurgeAllRandomBots()
+{
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[RandomBotGenerator] Purging all RandomBots...");
+
+    // Step 1: Get all RandomBot account IDs
+    std::unique_ptr<QueryResult> accountResult = LoginDatabase.PQuery(
+        "SELECT id FROM account WHERE username LIKE 'RNDBOT%%'");
+
+    if (!accountResult)
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[RandomBotGenerator] No RandomBot accounts found. Nothing to purge.");
+        return;
+    }
+
+    // Collect all account IDs
+    std::vector<uint32> accountIds;
+    do
+    {
+        Field* fields = accountResult->Fetch();
+        accountIds.push_back(fields[0].GetUInt32());
+    }
+    while (accountResult->NextRow());
+
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[RandomBotGenerator] Found %zu RandomBot accounts to purge.", accountIds.size());
+
+    // Step 2: Get all character GUIDs from these accounts
+    std::vector<uint32> charGuids;
+    for (uint32 accountId : accountIds)
+    {
+        std::unique_ptr<QueryResult> charResult = CharacterDatabase.PQuery(
+            "SELECT guid FROM characters WHERE account = %u", accountId);
+
+        if (charResult)
+        {
+            do
+            {
+                Field* fields = charResult->Fetch();
+                charGuids.push_back(fields[0].GetUInt32());
+            }
+            while (charResult->NextRow());
+        }
+    }
+
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[RandomBotGenerator] Found %zu characters to delete.", charGuids.size());
+
+    if (!charGuids.empty())
+    {
+        // Step 3: Delete each character using Player::DeleteFromDB (handles all related tables)
+        BarGoLink bar(charGuids.size());
+
+        for (uint32 charGuid : charGuids)
+        {
+            bar.step();
+
+            // Get account ID for this character (needed by DeleteFromDB)
+            uint32 accountId = 0;
+            std::unique_ptr<QueryResult> accResult = CharacterDatabase.PQuery(
+                "SELECT account FROM characters WHERE guid = %u", charGuid);
+            if (accResult)
+                accountId = accResult->Fetch()[0].GetUInt32();
+
+            // Delete character and all related data (deleteFinally=true bypasses level check)
+            Player::DeleteFromDB(ObjectGuid(HIGHGUID_PLAYER, charGuid), accountId, false, true);
+        }
+
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Deleted %zu characters.", charGuids.size());
+    }
+
+    // Step 4: Delete from playerbot table (in case any orphaned entries exist)
+    CharacterDatabase.PExecute("DELETE FROM playerbot WHERE ai = 'RandomBotAI'");
+
+    // Step 5: Delete the bot accounts from realmd
+    for (uint32 accountId : accountIds)
+    {
+        LoginDatabase.PExecute("DELETE FROM account WHERE id = %u", accountId);
+    }
+
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[RandomBotGenerator] Purge complete. Deleted %zu accounts.", accountIds.size());
+}
+
 // ============================================================================
 // Generation Logic
 // ============================================================================
@@ -97,7 +179,6 @@ void RandomBotGenerator::GenerateRandomBots(uint32 count)
     uint32 accountsNeeded = (count + 8) / 9;
 
     uint32 nextAccountId = GetNextFreeAccountId();
-    uint32 nextCharGuid = GetNextFreeCharacterGuid();
 
     uint32 botsCreated = 0;
 
@@ -122,7 +203,9 @@ void RandomBotGenerator::GenerateRandomBots(uint32 count)
             if (raceId == 0)
                 continue;
 
-            uint32 charGuid = nextCharGuid + botsCreated;
+            // Use ObjectMgr's GUID generator so the counter stays in sync
+            // This prevents player character creation from getting conflicting GUIDs
+            uint32 charGuid = sObjectMgr.GeneratePlayerLowGuid();
             uint8 level = 1;  // All bots start at level 1 (TODO: make configurable)
 
             // Create character and playerbot entry
@@ -185,7 +268,7 @@ uint32 RandomBotGenerator::CreateBotCharacter(uint32 charGuid, uint32 accountId,
         "0, 0, 0, 0, "
         "0, 0, 0, 0, "
         "0, 0, 100, 100, 100, 100, 100, 100, "
-        "'', '', 0, 0, 0, %u)",
+        "'', '', 0, 0, 1, %u)",  // world_phase_mask = 1 (normal world)
         charGuid, accountId, charName.c_str(), race, classId, gender, level,
         skin, face, hairStyle, hairColor, facialHair,
         mapId, posX, posY, posZ, posO,

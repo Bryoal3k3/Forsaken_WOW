@@ -18,6 +18,7 @@
 #include "DBCStructure.h"
 #include "SharedDefines.h"
 #include "Map.h"
+#include "ProgressBar.h"
 #include <cmath>
 #include <cfloat>
 
@@ -47,11 +48,24 @@ void VendoringStrategy::BuildVendorCache()
 
     sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[VendoringStrategy] Building vendor cache...");
 
+    // First pass: count all creature spawns for progress bar
+    uint32 totalCreatures = 0;
+    auto counter = [&totalCreatures](CreatureDataPair const& /*pair*/) {
+        ++totalCreatures;
+        return false; // continue iteration
+    };
+    sObjectMgr.DoCreatureData(counter);
+
+    // Create progress bar
+    BarGoLink bar(totalCreatures);
+
     uint32 vendorCount = 0;
     uint32 repairCount = 0;
 
-    // Lambda must be stored in a variable for DoCreatureData (takes non-const lvalue ref)
+    // Second pass: find vendors with progress
     auto vendorFinder = [&](CreatureDataPair const& pair) {
+        bar.step();
+
         CreatureData const& data = pair.second;
         uint32 guid = pair.first;
 
@@ -90,7 +104,7 @@ void VendoringStrategy::BuildVendorCache()
     sObjectMgr.DoCreatureData(vendorFinder);
 
     s_cacheBuilt = true;
-    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[VendoringStrategy] Vendor cache built: %u vendors (%u can repair)",
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Vendor cache built: %u vendors (%u can repair)",
              vendorCount, repairCount);
 }
 

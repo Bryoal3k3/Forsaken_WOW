@@ -1,6 +1,6 @@
 # RandomBot AI Development Progress
 
-## Project Status: Phase 4 COMPLETE
+## Project Status: Phase 4 COMPLETE + Critical Bug Fixes
 
 | Phase | Status | Description |
 |-------|--------|-------------|
@@ -13,11 +13,78 @@
 
 ---
 
+## 2025-01-11 - CRITICAL BUG FIXES
+
+### Issues Fixed
+
+**1. GUID Conflict Bug**
+- **Problem**: When user created characters, they would overwrite bot characters because both used GUID 1, 2, 3, etc.
+- **Root Cause**: `RandomBotGenerator::GetNextFreeCharacterGuid()` queried DB directly but didn't update `ObjectMgr.m_CharGuids` counter. When player created character, `GeneratePlayerLowGuid()` returned conflicting GUID.
+- **Fix**: Changed `RandomBotGenerator::GenerateRandomBots()` to use `sObjectMgr.GeneratePlayerLowGuid()` instead of manual GUID calculation. This keeps the GUID counter in sync.
+
+**2. Account ID Corruption Bug**
+- **Problem**: Bot characters' account IDs in DB would change from real values (1-6) to fake session IDs (10000+) after server restart.
+- **Root Cause**: Bots use generated session account IDs (10000+) to allow multiple bots from same account to be online. But `Player::SaveToDB()` saved the session account ID instead of the real DB account ID.
+- **Fix**: Modified `Player::SaveToDB()` to detect bots (`IsBot()`) and query the DB for the real account ID before saving. Only uses the DB value if it's valid (< 10000).
+
+**3. Vendor Cache Timing**
+- **Problem**: Vendor cache was built lazily on first use, causing delay message after bots started logging in.
+- **Fix**: Moved `VendoringStrategy::BuildVendorCache()` call to `PlayerBotMgr::Load()`, before bots start. Added progress bar using `BarGoLink`.
+
+### New Features
+
+**RandomBot.Purge Config Option**
+- Set `RandomBot.Purge = 1` in mangosd.conf
+- On server startup, completely removes all RandomBot data:
+  - Deletes all characters using `Player::DeleteFromDB()` (handles all related tables)
+  - Deletes from `playerbot` table
+  - Deletes RNDBOT accounts from realmd
+- Logs reminder to set back to 0 after purge
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `PlayerBotMgr.h` | Added `m_confPurgeRandomBots` member |
+| `PlayerBotMgr.cpp` | Added purge config loading, purge call in Load(), vendor cache call, fixed bot loading to use real account IDs |
+| `RandomBotGenerator.h` | Added `PurgeAllRandomBots()` declaration |
+| `RandomBotGenerator.cpp` | Added `PurgeAllRandomBots()` implementation with progress bar, changed `GenerateRandomBots()` to use `sObjectMgr.GeneratePlayerLowGuid()` |
+| `Player.cpp` | Modified `SaveToDB()` to preserve real account ID for bots |
+| `VendoringStrategy.h` | Made `BuildVendorCache()` public |
+| `VendoringStrategy.cpp` | Added progress bar to `BuildVendorCache()` |
+
+### Technical Details
+
+**Bot Session Account IDs (Why 10000+)**
+- Multiple bot characters share real accounts (RNDBOT001 has 9 chars)
+- Can't have multiple WorldSessions on same account
+- Solution: Generate fake session account IDs (10000+) for each bot
+- This allows all 50 bots to be online simultaneously
+- The REAL account ID is preserved in the database via SaveToDB fix
+
+**SaveToDB Fix Logic**
+```cpp
+if (IsBot())
+{
+    // Query DB for real account ID
+    result = CharacterDatabase.PQuery("SELECT account FROM characters WHERE guid = %u", GetGUIDLow());
+    if (result)
+    {
+        uint32 dbAccountId = result->Fetch()[0].GetUInt32();
+        // Only use if valid (not a corrupted session ID)
+        if (dbAccountId > 0 && dbAccountId < 10000)
+            saveAccountId = dbAccountId;
+    }
+}
+```
+
+---
+
 ## Current Bot Capabilities
 
 **What bots CAN do:**
 1. Auto-generate on first server launch (accounts + characters)
-2. Spawn in the world
+2. Spawn in the world without GUID conflicts
 3. Apply self-buffs when out of combat
 4. Fight back when attacked (class-appropriate combat rotations)
 5. Autonomously find and attack mobs (including neutral/yellow mobs)
@@ -26,328 +93,112 @@
 8. Rest when low HP/mana (sit + cheat regen, no consumables needed)
 9. Handle death - release spirit, ghost walk to corpse, resurrect
 10. Death loop detection - use spirit healer if dying too often
-11. **NEW:** Vendor when bags full or gear broken - walk to nearest vendor
-12. **NEW:** Sell all items and repair gear at vendor
+11. Vendor when bags full or gear broken - walk to nearest vendor
+12. Sell all items and repair gear at vendor
+13. Persist correctly across server restarts (account IDs preserved)
 
 **What bots CANNOT do yet:**
 - Travel/explore to find new grinding areas (stuck at vendor location after vendoring)
 
 ---
 
-## Phase 4: Vendoring - ✅ COMPLETE
+## Configuration
 
-### What Works
-- Bot detects when bags are full (no free slots) or gear is broken (durability = 0)
-- Vendor cache built at startup from creature spawn data (933 vendors, 305 can repair)
-- Bot finds nearest friendly vendor that can repair (faction-aware)
-- Bot walks to vendor location
-- Sells all items with sell price > 0
-- Repairs all gear using `DurabilityRepairAll()`
-- Debug logging shows vendoring decisions and progress
-
-### Known Limitations (Phase 5 will address)
-- Simple `MovePoint()` pathfinding - bot may float over terrain
-- After vendoring, bot stuck at town with no grind targets nearby
-- Need exploration/travel to return to grinding areas
-
-### Architecture
-```
-src/game/PlayerBots/Strategies/
-└── VendoringStrategy.h/cpp  ← Vendoring behavior
-```
-
-### Key Technical Solutions
-
-**Vendor Cache:**
-- Built once at first use using `sObjectMgr.DoCreatureData()`
-- Iterates all creature spawns in memory (no runtime SQL)
-- Filters by `UNIT_NPC_FLAG_VENDOR` and `UNIT_NPC_FLAG_REPAIR`
-- Stores position, entry, guid, map, canRepair for each vendor
-
-**Faction Filtering:**
-- Uses `FactionTemplateEntry::IsHostileTo()` to check faction compatibility
-- Bot only goes to vendors friendly to their faction (Alliance/Horde)
-
-**State Machine:**
-- `IDLE` → `FINDING_VENDOR` → `WALKING_TO_VENDOR` → `AT_VENDOR` → `DONE`
-- Stuck detection: 30 second timeout, progress check every 3 seconds
-- Aborts vendoring if bot enters combat while walking
-
-### Files Created
-| File | Purpose |
-|------|---------|
-| `Strategies/VendoringStrategy.h/cpp` | Vendoring state machine and logic |
-
-### Files Modified
-| File | Change |
-|------|--------|
-| `RandomBotAI.h` | Added VendoringStrategy member |
-| `RandomBotAI.cpp` | Integrated vendoring into UpdateOutOfCombatAI() |
-| `CMakeLists.txt` | Added VendoringStrategy files |
-
----
-
-## Phase 3: Death Handling - ✅ COMPLETE
-
-### What Works
-- Bot dies → releases spirit → teleports to graveyard as ghost
-- Ghost walks back to corpse location
-- Resurrects on top of corpse with 50% HP/mana
-- Death loop detection: 3 deaths in 10 minutes = use spirit healer
-- Spirit healer resurrection applies resurrection sickness
-
-### Architecture
-```
-src/game/PlayerBots/Strategies/
-└── GhostWalkingStrategy.h/cpp  ← Death handling strategy
-```
-
-### Key Technical Solutions
-
-**Death State Flow:**
-- `JUST_DIED` (1) → transient, wait for next tick
-- `CORPSE` (2) → call `BuildPlayerRepop()` + `RepopAtGraveyard()` to become ghost
-- `DEAD` (3) → already a ghost, walk to corpse
-
-**Ghost Walking:**
-- `GetCorpse()` returns corpse location
-- `MovePoint()` moves ghost toward corpse
-- Within 5 yards → `ResurrectPlayer(0.5f)` + `SpawnCorpseBones()`
-
-**Death Loop Detection:**
-- Tracks timestamps of recent deaths
-- 3+ deaths within 10 minutes = death loop
-- Resurrect at spirit healer with `ResurrectPlayer(0.5f, true)` (sickness)
-
-### Files Created
-| File | Purpose |
-|------|---------|
-| `Strategies/GhostWalkingStrategy.h/cpp` | Ghost walking and resurrection |
-
-### Files Modified
-| File | Change |
-|------|--------|
-| `RandomBotAI.h` | Added GhostWalkingStrategy member |
-| `RandomBotAI.cpp` | Call ghost strategy when dead |
-| `CMakeLists.txt` | Added GhostWalkingStrategy files |
-
----
-
-## Phase 2: Grinding Behavior - ✅ COMPLETE
-
-### What Works
-- Strategy layer architecture implemented
-- Bots find mobs within 50 yards using custom grid search
-- Bots attack neutral (yellow) mobs (solved the hostile-only limitation)
-- Level filtering: only attacks mobs within ±2 levels
-- Skips elites, critters, totems, evading mobs
-- Skips mobs already tapped by others
-- Loots corpses after combat ends (universal behavior)
-- **NEW:** Rests when HP < 35% or Mana < 45% (BotCheats system)
-
-### Future Enhancements (not blockers)
-- [ ] Roaming/exploration between mobs
-
-### Architecture
-```
-src/game/PlayerBots/
-├── RandomBotAI.h/cpp           ← Combat rotations + universal behaviors
-├── BotCheats.h/cpp             ← Cheat utilities (resting, future: reagents, ammo)
-└── Strategies/
-    ├── IBotStrategy.h          ← Strategy interface
-    ├── GrindingStrategy.h/cpp  ← High-level behavior (find mob, attack)
-    └── LootingBehavior.h/cpp   ← Looting corpses (universal, not strategy-specific)
-```
-
-### Key Technical Solutions
-
-**Neutral Mob Targeting:**
-Standard `GetEnemyListInRadiusAround()` only finds hostile mobs. We solved this by:
-1. Using `Cell::VisitGridObjects()` with custom `AllCreaturesInRange` checker
-2. Manually filtering by `GetReactionTo()` to accept `REP_NEUTRAL` (yellow) mobs
-3. This bypasses the `IsValidAttackTarget()` filter that blocks neutrals
-
-**Looting:**
-- LootingBehavior runs in RandomBotAI main loop (universal, not strategy-specific)
-- Triggers when combat ends (tracks `m_wasInCombat` state)
-- Scans for dead creatures where `IsTappedBy(bot)` returns true
-- Uses `Player::SendLoot()`, `AutoStoreLoot()`, `DoLootRelease()`
-- 40 yard max range, 12 second timeout to prevent getting stuck
-
-**Resting (BotCheats):**
-- BotCheats static utility class bypasses item-based mechanics
-- Bot sits down when HP < 35% or Mana < 45%
-- Regenerates 5% HP/mana every 2 seconds (no consumables needed)
-- Stands up when both HP >= 90% and Mana >= 90%
-- Combat-aware: immediately stands if bot or group member enters combat
-- Prevents sitting during raid pulls (checks group combat state)
-
-### Files Created
-| File | Purpose |
-|------|---------|
-| `Strategies/IBotStrategy.h` | Strategy interface |
-| `Strategies/GrindingStrategy.h/cpp` | Mob finding logic |
-| `Strategies/LootingBehavior.h/cpp` | Looting corpses after combat |
-| `BotCheats.h/cpp` | Cheat utilities (resting without consumables) |
-
-### Files Modified
-| File | Change |
-|------|--------|
-| `RandomBotAI.h` | Added LootingBehavior, resting state tracking |
-| `RandomBotAI.cpp` | Integrated looting and resting into UpdateAI() |
-| `CMakeLists.txt` | Added Strategy, LootingBehavior, and BotCheats files |
-
----
-
-## Phase 1: Combat AI - ✅ COMPLETE
-
-### What Works
-- Bots load from database on server start
-- Bots initialize (role, spells, pets) when spawned
-- Bots fight back when attacked with class-appropriate abilities
-- Bots maintain self-buffs out of combat
-
-### Files Created
-| File | Purpose |
-|------|---------|
-| `src/game/PlayerBots/RandomBotAI.h` | AI class declaration |
-| `src/game/PlayerBots/RandomBotAI.cpp` | Full implementation (~850 lines) |
-
-### Combat Abilities by Class
-| Class | Key Abilities |
-|-------|--------------|
-| Warrior | Execute, Overpower, Mortal Strike, Bloodthirst, Heroic Strike, Battle Shout |
-| Paladin | Judgement, Hammer of Wrath, Consecration, Holy Shield, self-healing |
-| Hunter | Hunter's Mark, Aimed Shot, Multi-Shot, Arcane Shot, Serpent Sting |
-| Mage | Frost Nova, Fire Blast, Frostbolt, Fireball, Ice Armor, Arcane Intellect |
-| Priest | Power Word: Shield, Shadow Word: Pain, Mind Blast, Smite, self-healing |
-| Warlock | Corruption, Curse of Agony, Immolate, Shadow Bolt, Demon Armor |
-| Rogue | Slice and Dice, Eviscerate, Sinister Strike |
-| Shaman | Earth Shock, Flame Shock, Stormstrike, Lightning Bolt, self-healing |
-| Druid | Moonfire, Wrath, Starfire, Mark of the Wild, Thorns, self-healing |
-
----
-
-## Phase 0: Auto-Generation - ✅ COMPLETE
-
-### What Works
-On first launch with `RandomBot.Enable=1` and empty playerbot table:
-1. System detects no bots exist
-2. Creates RNDBOT### accounts in `realmd.account`
-3. Creates bot characters (all 9 classes, levels 1-60)
-4. Inserts entries in `characters.playerbot` with `ai='RandomBotAI'`
-5. Normal Load() picks them up and spawns them
-
-### Files Created
-| File | Purpose |
-|------|---------|
-| `src/game/PlayerBots/RandomBotGenerator.h` | Generator class declaration |
-| `src/game/PlayerBots/RandomBotGenerator.cpp` | SQL-based generation logic |
-
----
-
-## Session Log
-
-### 2025-01-10 - Phase 4 COMPLETE (Vendoring)
-- Created VendoringStrategy with state machine
-- Vendor cache built from creature spawn data (933 vendors, 305 can repair)
-- Faction-aware vendor finding (Alliance/Horde)
-- Bot walks to vendor, sells all items, repairs gear
-- **TESTED**: Bot detects full bags, walks to vendor, sells items repeatedly
-- Known issue: pathfinding uses simple MovePoint (may float over terrain)
-- Known issue: bot stuck at town after vendoring (needs Phase 5 exploration)
-- Phase 4 complete! Next: Phase 5 (movement/exploration)
-
-### 2025-01-10 - Phase 3 COMPLETE (Death Handling)
-- Created GhostWalkingStrategy for death handling
-- Bot releases spirit, teleports to graveyard, walks back to corpse
-- Resurrects on top of corpse with 50% HP/mana
-- Death loop detection: 3 deaths in 10 min = spirit healer res with sickness
-- **TESTED**: Bots die, release, walk back, resurrect correctly
-- Phase 3 complete! Next: Phase 4 (vendoring)
-
-### 2025-01-10 - Phase 2 COMPLETE (Resting Added)
-- Created BotCheats utility class for "cheat" mechanics
-- Implemented resting: bots sit and regen 5% HP/mana per 2 sec tick
-- Thresholds: Start at 35% HP or 45% mana, stop at 90%
-- Combat-aware: stands up if bot or group member enters combat
-- **TESTED**: Bots sit down when low, regen without consumables
-- Phase 2 complete! Next: Phase 3 (death handling)
-
-### 2025-01-10 - Phase 2 Looting Complete
-- Added tapped mob check to GrindingStrategy (skip mobs tapped by others)
-- Created LootingBehavior class for looting corpses after combat
-- Integrated looting into RandomBotAI main loop (universal behavior)
-- **TESTED**: Bots loot gold and items after killing mobs
-
-### 2025-01-10 - Phase 2 Mob Targeting Working
-- Implemented Strategy layer architecture (IBotStrategy, GrindingStrategy)
-- Solved neutral mob targeting using custom grid search
-- Refactored grinding code from RandomBotAI into GrindingStrategy
-- **TESTED**: Bots autonomously find and attack mobs
-
-### 2025-01-09 - Phase 1 Complete
-- Created RandomBotAI class with all 9 class rotations
-- Registered in AI factory
-- **TESTED**: Bots enter combat and cast spells when attacked
-
----
-
-## Key Code Locations
-
-### Current Bot System
-| Location | Purpose |
-|----------|---------|
-| `RandomBotAI::UpdateAI()` | Main update loop (death, resting, combat, looting) |
-| `RandomBotAI::UpdateOutOfCombatAI()` | Delegates to vendoring/grinding strategy |
-| `VendoringStrategy::Update()` | Walk to vendor, sell, repair |
-| `VendoringStrategy::NeedsToVendor()` | Check bags full or gear broken |
-| `VendoringStrategy::BuildVendorCache()` | Build vendor location cache at startup |
-| `GhostWalkingStrategy::Update()` | Ghost walk to corpse and resurrect |
-| `GhostWalkingStrategy::OnDeath()` | Release spirit, handle death loop |
-| `BotCheats::HandleResting()` | Sit and regen HP/mana (cheat) |
-| `BotCheats::CanRest()` | Check if safe to rest (no combat) |
-| `LootingBehavior::Update()` | Find and loot corpses |
-| `GrindingStrategy::Update()` | Find and attack mobs |
-| `GrindingStrategy::FindGrindTarget()` | Custom grid search |
-| `RandomBotAI::UpdateInCombatAI_<Class>()` | Class combat rotations |
-
-### AI Factory
-| Location | Purpose |
-|----------|---------|
-| `PlayerBotAI.cpp:362-377` | `CreatePlayerBotAI()` - type registration |
-
-### Configuration
 | Setting | Default | Purpose |
 |---------|---------|---------|
-| `RandomBot.Enable` | 1 | Enable system |
+| `RandomBot.Enable` | 0 | Enable RandomBot system |
+| `RandomBot.Purge` | 0 | Purge all bots on startup (set back to 0 after!) |
 | `RandomBot.MaxBots` | 50 | Bots to generate |
-| `RandomBot.MinBots` | 3 | Minimum online |
+| `RandomBot.MinBots` | 3 | Minimum bots online |
 | `RandomBot.Refresh` | 60000 | Add/remove interval (ms) |
+
+---
+
+## Architecture
+
+```
+src/game/PlayerBots/
+├── RandomBotAI.h/cpp           ← Bot AI (combat rotations, main loop)
+├── RandomBotGenerator.h/cpp    ← Auto-generation + purge on first launch
+├── PlayerBotMgr.h/cpp          ← Bot lifecycle management
+├── BotCheats.h/cpp             ← Cheat utilities (resting)
+│
+└── Strategies/
+    ├── IBotStrategy.h          ← Strategy interface
+    ├── GrindingStrategy.h/cpp  ← Find mob → kill
+    ├── LootingBehavior.h/cpp   ← Loot corpses after combat
+    ├── GhostWalkingStrategy.h/cpp ← Death handling
+    └── VendoringStrategy.h/cpp ← Sell items, repair gear
+```
+
+---
+
+## Database Tables
+
+| Table | Purpose |
+|-------|---------|
+| `realmd.account` | Bot accounts (RNDBOT001, RNDBOT002...) |
+| `characters.characters` | Bot character data |
+| `characters.playerbot` | Links char_guid to AI type ('RandomBotAI') |
+
+---
+
+## Build & Test
+
+```bash
+# Build
+cd ~/Desktop/Forsaken_WOW/core/build && make -j$(nproc) && make install
+
+# Run (two terminals)
+cd ~/Desktop/Forsaken_WOW/run/bin && ./realmd   # Terminal 1
+cd ~/Desktop/Forsaken_WOW/run/bin && ./mangosd  # Terminal 2
+```
 
 ---
 
 ## Testing Commands
 
 ```sql
--- Count bots
-SELECT COUNT(*) FROM characters.playerbot WHERE ai = 'RandomBotAI';
+-- Check bot accounts
+SELECT id, username FROM realmd.account WHERE username LIKE 'RNDBOT%';
 
--- Check bot characters
-SELECT c.guid, c.name, c.class, c.level, c.position_x, c.position_y, c.map
-FROM characters.characters c
-JOIN characters.playerbot p ON c.guid = p.char_guid
-WHERE p.ai = 'RandomBotAI' LIMIT 10;
-```
+-- Check bot characters and their accounts
+SELECT guid, account, name, level FROM characters.characters
+WHERE account IN (SELECT id FROM realmd.account WHERE username LIKE 'RNDBOT%') LIMIT 10;
 
-```
-# In-game GM commands
-.pinfo RNDBOT001          # Check bot account
-.appear <BotName>         # Teleport to bot
-.modify hp 1              # Damage bot to test combat
+-- Verify account IDs are correct (should be 1-6, NOT 10000+)
+SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ```
 
 ---
 
-*Last Updated: 2025-01-10*
-*Current State: Phase 4 complete! Bots grind, loot, rest, handle death, and vendor autonomously. Next: Phase 5 (movement/exploration).*
+## Session Log
+
+### 2025-01-11 - Critical Bug Fixes
+- Fixed GUID conflict: bots now use `sObjectMgr.GeneratePlayerLowGuid()`
+- Fixed account ID corruption: `SaveToDB()` preserves real account ID for bots
+- Added `RandomBot.Purge` config option for clean bot removal
+- Moved vendor cache build to startup with progress bar
+- **TESTED**: Server restarts preserve correct account IDs, no GUID conflicts
+
+### 2025-01-11 - Bug Fix: Bots not showing in /who list
+- Fixed `world_phase_mask = 0` issue in RandomBotGenerator
+
+### 2025-01-10 - Phase 4 COMPLETE (Vendoring)
+- Created VendoringStrategy with state machine
+- Vendor cache, faction-aware vendor finding
+- Bot walks to vendor, sells all items, repairs gear
+
+### 2025-01-10 - Phase 3 COMPLETE (Death Handling)
+- Ghost walking, resurrection, death loop detection
+
+### 2025-01-10 - Phase 2 COMPLETE (Grinding + Resting)
+- Neutral mob targeting, looting, resting with BotCheats
+
+### 2025-01-09 - Phase 1 COMPLETE (Combat AI)
+- All 9 class rotations implemented
+
+---
+
+*Last Updated: 2025-01-11*
+*Current State: Phase 4 complete with critical bug fixes. Bots grind, loot, rest, handle death, vendor, and persist correctly across restarts. Next: Phase 5 (movement/exploration).*

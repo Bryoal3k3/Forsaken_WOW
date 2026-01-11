@@ -128,6 +128,7 @@ class PlayerBotMgr
         bool m_confAllowSaving;
         bool m_confDebug;
         bool m_confEnableRandomBots;
+        bool m_confPurgeRandomBots;
         bool m_confBattleBotAutoJoin;
 };
 

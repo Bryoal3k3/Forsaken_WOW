@@ -56,6 +56,9 @@ public:
     // Get total free bag slots
     static uint32 GetFreeBagSlots(Player* pBot);
 
+    // Pre-build vendor cache (call during server startup)
+    static void BuildVendorCache();
+
 private:
     enum class VendorState
     {
@@ -77,9 +80,6 @@ private:
     static std::vector<VendorLocation> s_vendorCache;
     static bool s_cacheBuilt;
     static std::mutex s_cacheMutex;
-
-    // Cache management
-    static void BuildVendorCache();
 
     // Find nearest friendly vendor for this bot
     bool FindNearestVendor(Player* pBot);

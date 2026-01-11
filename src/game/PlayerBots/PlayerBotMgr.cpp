@@ -2,6 +2,7 @@
 #include "Policies/SingletonImp.h"
 #include "PlayerBotMgr.h"
 #include "ObjectMgr.h"
+#include "ObjectAccessor.h"
 #include "World.h"
 #include "WorldSession.h"
 #include "AccountMgr.h"
@@ -18,6 +19,7 @@
 #include "Language.h"
 #include "Spell.h"
 #include "RandomBotGenerator.h"
+#include "Strategies/VendoringStrategy.h"
 
 INSTANTIATE_SINGLETON_1(PlayerBotMgr);
 
@@ -33,6 +35,7 @@ PlayerBotMgr::PlayerBotMgr()
     m_confRandomBotsRefresh     = 60000;
     m_confUpdateDiff            = 10000;
     m_confEnableRandomBots      = false;
+    m_confPurgeRandomBots       = false;
     m_confDebug                 = false;
     m_confBattleBotAutoJoin     = false;
 
@@ -51,6 +54,7 @@ PlayerBotMgr::~PlayerBotMgr()
 void PlayerBotMgr::LoadConfig()
 {
     m_confEnableRandomBots = sConfig.GetBoolDefault("RandomBot.Enable", false);
+    m_confPurgeRandomBots = sConfig.GetBoolDefault("RandomBot.Purge", false);
     m_confMinRandomBots = sConfig.GetIntDefault("RandomBot.MinBots", 3);
     m_confMaxRandomBots = sConfig.GetIntDefault("RandomBot.MaxBots", 10);
     m_confRandomBotsRefresh = sConfig.GetIntDefault("RandomBot.Refresh", 60000);
@@ -73,6 +77,13 @@ void PlayerBotMgr::Load()
 
     // 2- Configuration
     LoadConfig();
+
+    // 2.1- Purge all RandomBots if requested (before any bot loading)
+    if (m_confPurgeRandomBots)
+    {
+        sRandomBotGenerator.PurgeAllRandomBots();
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[PlayerBotMgr] RandomBot.Purge is enabled. Set it to 0 to prevent purge on next restart.");
+    }
 
     // 2.5- Auto-generate RandomBots if needed (first launch with RandomBot.Enable=1)
     if (m_confEnableRandomBots)
@@ -105,8 +116,12 @@ void PlayerBotMgr::Load()
         {
             fields = result->Fetch();
             uint32 guid = fields[0].GetUInt32();
-            uint32 acc = GenBotAccountId();
             uint32 chance = fields[1].GetUInt32();
+
+            // Use generated session account IDs to avoid conflicts
+            // (multiple bot chars share same real account, can't have multiple sessions)
+            // The SaveToDB fix in Player.cpp preserves the real DB account ID
+            uint32 acc = GenBotAccountId();
 
             std::shared_ptr<PlayerBotEntry> entry = std::make_shared<PlayerBotEntry>(guid, acc, chance);
             entry->ai.reset(CreatePlayerBotAI(fields[2].GetCppString()));
@@ -128,6 +143,10 @@ void PlayerBotMgr::Load()
         m_confMaxRandomBots = m_bots.size();
     if (m_confMaxRandomBots <= m_confMinRandomBots)
         m_confMaxRandomBots = m_confMinRandomBots + 1;
+
+    // 5.5- Pre-build vendor cache so it's ready when bots need it
+    if (m_confEnableRandomBots && !m_bots.empty())
+        VendoringStrategy::BuildVendorCache();
 
     // 6- Start initial bots
     if (m_confEnableRandomBots)

@@ -16510,7 +16510,35 @@ void Player::SaveToDB(bool online, bool force)
                               "?, ?, ?, ?)");
 
     uberInsert.addUInt32(GetGUIDLow());
-    uberInsert.addUInt32(GetSession()->GetAccountId());
+    // For bots, preserve the original DB account ID instead of the session's generated account ID
+    uint32 saveAccountId = GetSession()->GetAccountId();
+    if (IsBot())
+    {
+        // Query DB directly for the real account ID
+        std::unique_ptr<QueryResult> result = CharacterDatabase.PQuery(
+            "SELECT account FROM characters WHERE guid = %u", GetGUIDLow());
+        if (result)
+        {
+            uint32 dbAccountId = result->Fetch()[0].GetUInt32();
+            // Only use DB value if it's a real account ID (not a corrupted session ID)
+            if (dbAccountId > 0 && dbAccountId < 10000)
+            {
+                saveAccountId = dbAccountId;
+            }
+            // If DB has corrupted 10000+ ID, DON'T save - keep the corrupted value
+            // rather than make it worse. Log error for debugging.
+            else if (dbAccountId >= 10000)
+            {
+                sLog.Out(LOG_BASIC, LOG_LVL_ERROR,
+                    "[SaveToDB] Bot '%s' (GUID %u) has corrupted account ID %u in DB! Not overwriting.",
+                    GetName(), GetGUIDLow(), dbAccountId);
+                // Keep the existing DB value by not changing saveAccountId... wait no,
+                // we need to NOT save at all or use the existing value
+                saveAccountId = dbAccountId; // Keep corrupted value, don't make worse
+            }
+        }
+    }
+    uberInsert.addUInt32(saveAccountId);
     uberInsert.addString(m_name);
     uberInsert.addUInt8(GetRace());
     uberInsert.addUInt8(GetClass());

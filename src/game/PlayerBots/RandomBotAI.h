@@ -18,6 +18,7 @@
 class IBotStrategy;
 class GhostWalkingStrategy;
 class VendoringStrategy;
+class BotCombatMgr;
 
 class RandomBotAI : public CombatBotBaseAI
 {
@@ -36,6 +37,9 @@ public:
 
     // Reset behaviors (call on death, etc.)
     void ResetBehaviors();
+
+    // Combat manager accessor (for GrindingStrategy)
+    BotCombatMgr* GetCombatMgr() { return m_combatMgr.get(); }
 
     // Class-specific combat routines
     void UpdateInCombatAI_Paladin() override;
@@ -77,6 +81,9 @@ private:
 
     // Vendoring strategy
     std::unique_ptr<VendoringStrategy> m_vendoringStrategy;
+
+    // Combat manager (handles class-specific engagement and rotations)
+    std::unique_ptr<BotCombatMgr> m_combatMgr;
 };
 
 #endif // MANGOS_RANDOMBOTAI_H

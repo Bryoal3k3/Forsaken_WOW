@@ -7,6 +7,8 @@
  */
 
 #include "GrindingStrategy.h"
+#include "RandomBotAI.h"
+#include "Combat/BotCombatMgr.h"
 #include "Player.h"
 #include "Creature.h"
 #include "MotionMaster.h"
@@ -52,7 +54,14 @@ bool GrindingStrategy::Update(Player* pBot, uint32 /*diff*/)
     Creature* pTarget = FindGrindTarget(pBot, SEARCH_RANGE);
     if (pTarget)
     {
-        // Attack the mob
+        // Use combat manager for class-appropriate engagement
+        if (RandomBotAI* pAI = dynamic_cast<RandomBotAI*>(pBot->AI()))
+        {
+            if (pAI->GetCombatMgr())
+                return pAI->GetCombatMgr()->Engage(pBot, pTarget);
+        }
+
+        // Fallback if combat manager not available
         if (pBot->Attack(pTarget, true))
         {
             pBot->GetMotionMaster()->MoveChase(pTarget);

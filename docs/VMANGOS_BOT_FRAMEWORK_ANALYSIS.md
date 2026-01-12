@@ -288,17 +288,69 @@ struct {
 
 ---
 
-## 10. Files to Study
+## 10. RandomBot Combat Handler System
+
+RandomBotAI uses a modular combat handler architecture for class-specific behavior:
+
+### Architecture
+```
+RandomBotAI
+└── BotCombatMgr (combat coordinator)
+    └── IClassCombat (interface)
+        ├── WarriorCombat
+        ├── PaladinCombat
+        ├── HunterCombat
+        ├── MageCombat
+        ├── PriestCombat
+        ├── WarlockCombat
+        ├── RogueCombat
+        ├── ShamanCombat
+        └── DruidCombat
+```
+
+### IClassCombat Interface
+```cpp
+class IClassCombat
+{
+public:
+    virtual ~IClassCombat() = default;
+    virtual bool Engage(Player* pBot, Unit* pTarget) = 0;      // How to pull
+    virtual void UpdateCombat(Player* pBot, Unit* pVictim) = 0; // Combat rotation
+    virtual void UpdateOutOfCombat(Player* pBot) = 0;           // Buffs, pets
+    virtual char const* GetName() const = 0;
+};
+```
+
+### Engagement Types
+| Class Type | Engage() Implementation |
+|------------|------------------------|
+| Melee | `Attack()` + `MoveChase()` |
+| Caster | `SetTargetGuid()` only - first rotation spell pulls |
+| Hunter | `SetTargetGuid()` + `MoveChase(25.0f)` + Auto Shot |
+
+### Handler Access to Spells
+Each handler receives a pointer to `CombatBotBaseAI` in constructor, giving access to:
+- `m_spells` union (spell data for all classes)
+- `CanTryToCastSpell()` - spell validation
+- `DoCastSpell()` - spell execution
+- `FindAndHealInjuredAlly()` - healing utilities
+
+---
+
+## 11. Files to Study
 
 For custom AI implementation, study these in order:
 
 1. `PlayerBotAI.h` - Base class interface
 2. `CombatBotBaseAI.h` - Combat API and spell structures
 3. `CombatBotBaseAI.cpp` - Implementation details
-4. `PartyBotAI.cpp` - Example class-specific routines
-5. `PlayerBotMgr.cpp` - Bot lifecycle management
+4. `Combat/BotCombatMgr.cpp` - Combat handler creation
+5. `Combat/Classes/*Combat.cpp` - Class-specific handlers
+6. `PartyBotAI.cpp` - Example class-specific routines
+7. `PlayerBotMgr.cpp` - Bot lifecycle management
 
 ---
 
 *Generated: 2026-01-08*
+*Updated: 2025-01-11 - Added RandomBot combat handler system*
 *Purpose: Pre-implementation research for bot framework extension*

@@ -1,6 +1,6 @@
 # RandomBot AI Development Progress
 
-## Project Status: Phase 4 COMPLETE + Critical Bug Fixes
+## Project Status: Phase 4 COMPLETE + Combat System Refactor
 
 | Phase | Status | Description |
 |-------|--------|-------------|
@@ -9,7 +9,72 @@
 | Phase 2 | ✅ Complete | Grinding - find mobs, kill, loot, rest |
 | Phase 3 | ✅ Complete | Death handling and respawn |
 | Phase 4 | ✅ Complete | Vendoring - sell items, repair gear |
+| Phase 4.5 | ✅ Complete | Combat system refactor - class-appropriate engagement |
 | Phase 5 | 📋 Planned | Movement - exploration, travel |
+
+---
+
+## 2025-01-11 - COMBAT SYSTEM REFACTOR
+
+### Problem Solved
+All bots (including casters) were initiating combat with melee auto-attack. Mages would run up and swing at mobs before casting. Hunters would run into melee instead of using Auto Shot.
+
+### Solution: Modular Combat Handlers
+Created a new combat architecture with per-class handlers:
+
+| Class Type | Engagement Behavior |
+|------------|---------------------|
+| **Melee** (Warrior, Rogue, Paladin, Shaman, Druid) | `Attack()` + `MoveChase()` - run in and melee |
+| **Caster** (Mage, Priest, Warlock) | `SetTargetGuid()` only - first rotation spell pulls |
+| **Hunter** | `SetTargetGuid()` + `MoveChase(25.0f)` + Auto Shot at range |
+
+### New Architecture
+
+```
+src/game/PlayerBots/
+├── Combat/
+│   ├── IClassCombat.h              ← Interface for class handlers
+│   ├── BotCombatMgr.h/cpp          ← Combat coordinator
+│   │
+│   └── Classes/
+│       ├── WarriorCombat.h/cpp     ← Melee engagement
+│       ├── PaladinCombat.h/cpp     ← Melee engagement
+│       ├── HunterCombat.h/cpp      ← Ranged, Auto Shot at 25 yards
+│       ├── MageCombat.h/cpp        ← Caster, spell pull
+│       ├── PriestCombat.h/cpp      ← Caster, spell pull
+│       ├── WarlockCombat.h/cpp     ← Caster, spell pull
+│       ├── RogueCombat.h/cpp       ← Melee engagement
+│       ├── ShamanCombat.h/cpp      ← Melee engagement
+│       └── DruidCombat.h/cpp       ← Melee engagement
+```
+
+### How It Works
+
+1. **RandomBotAI** creates a `BotCombatMgr` on initialization
+2. **BotCombatMgr** creates the appropriate class handler based on `GetClass()`
+3. **GrindingStrategy** calls `GetCombatMgr()->Engage()` instead of generic `Attack()`
+4. Each class handler implements `IClassCombat` interface:
+   - `Engage()` - How to initiate combat (class-specific)
+   - `UpdateCombat()` - Combat rotation
+   - `UpdateOutOfCombat()` - Buffs, pet management
+
+### Files Created (21 new files)
+
+| File | Purpose |
+|------|---------|
+| `Combat/IClassCombat.h` | Interface for class handlers |
+| `Combat/BotCombatMgr.h` | Combat coordinator header |
+| `Combat/BotCombatMgr.cpp` | Combat coordinator implementation |
+| `Combat/Classes/*Combat.h/cpp` | 9 class handlers (18 files) |
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `RandomBotAI.h` | Added `BotCombatMgr` member and accessor |
+| `RandomBotAI.cpp` | Initialize combat manager, delegate to handlers |
+| `GrindingStrategy.cpp` | Use `GetCombatMgr()->Engage()` for engagement |
+| `CMakeLists.txt` | Added new source files and include directories |
 
 ---
 
@@ -93,15 +158,19 @@ if (IsBot())
 2. Spawn in the world without GUID conflicts
 3. Apply self-buffs when out of combat
 4. Fight back when attacked (class-appropriate combat rotations)
-5. Autonomously find and attack mobs (including neutral/yellow mobs)
-6. Skip mobs already tapped by other players/bots
-7. Loot corpses after combat (gold + items)
-8. Rest when low HP/mana (sit + cheat regen, no consumables needed)
-9. Handle death - release spirit, ghost walk to corpse, resurrect
-10. Death loop detection - use spirit healer if dying too often
-11. Vendor when bags full or gear broken - walk to nearest vendor
-12. Sell all items and repair gear at vendor
-13. Persist correctly across server restarts (account IDs preserved)
+5. **Engage targets appropriately by class:**
+   - Melee classes (Warrior, Rogue, Paladin, Shaman, Druid) charge in
+   - Casters (Mage, Priest, Warlock) stand and cast - no melee run-up
+   - Hunters use Auto Shot at 25 yard range
+6. Autonomously find and attack mobs (including neutral/yellow mobs)
+7. Skip mobs already tapped by other players/bots
+8. Loot corpses after combat (gold + items)
+9. Rest when low HP/mana (sit + cheat regen, no consumables needed)
+10. Handle death - release spirit, ghost walk to corpse, resurrect
+11. Death loop detection - use spirit healer if dying too often
+12. Vendor when bags full or gear broken - walk to nearest vendor
+13. Sell all items and repair gear at vendor
+14. Persist correctly across server restarts (account IDs preserved)
 
 **What bots CANNOT do yet:**
 - Travel/explore to find new grinding areas (stuck at vendor location after vendoring)
@@ -124,18 +193,41 @@ if (IsBot())
 
 ```
 src/game/PlayerBots/
-├── RandomBotAI.h/cpp           ← Bot AI (combat rotations, main loop)
+├── RandomBotAI.h/cpp           ← Bot AI (main loop, coordinates all systems)
 ├── RandomBotGenerator.h/cpp    ← Auto-generation + purge on first launch
 ├── PlayerBotMgr.h/cpp          ← Bot lifecycle management
 ├── BotCheats.h/cpp             ← Cheat utilities (resting)
 │
-└── Strategies/
+├── Combat/                     ← Combat system (class-specific handlers)
+│   ├── IClassCombat.h          ← Interface for class handlers
+│   ├── BotCombatMgr.h/cpp      ← Combat coordinator
+│   └── Classes/                ← Per-class combat handlers
+│       ├── WarriorCombat.h/cpp
+│       ├── PaladinCombat.h/cpp
+│       ├── HunterCombat.h/cpp
+│       ├── MageCombat.h/cpp
+│       ├── PriestCombat.h/cpp
+│       ├── WarlockCombat.h/cpp
+│       ├── RogueCombat.h/cpp
+│       ├── ShamanCombat.h/cpp
+│       └── DruidCombat.h/cpp
+│
+└── Strategies/                 ← High-level behavior
     ├── IBotStrategy.h          ← Strategy interface
     ├── GrindingStrategy.h/cpp  ← Find mob → kill
     ├── LootingBehavior.h/cpp   ← Loot corpses after combat
     ├── GhostWalkingStrategy.h/cpp ← Death handling
     └── VendoringStrategy.h/cpp ← Sell items, repair gear
 ```
+
+### Layer Responsibilities
+
+| Layer | Responsibility |
+|-------|---------------|
+| **RandomBotAI** | Main brain - coordinates strategies, combat manager, behaviors |
+| **BotCombatMgr** | Combat coordinator - creates/delegates to class handlers |
+| **IClassCombat** | Class-specific combat - engagement, rotations, buffs |
+| **Strategies** | High-level goals - what to do next (find mob, rest, sell) |
 
 ---
 
@@ -180,6 +272,14 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2025-01-11 - Combat System Refactor (Phase 4.5)
+- Refactored combat engagement to be class-appropriate
+- Created modular combat handler architecture (BotCombatMgr + IClassCombat)
+- 21 new files: interface, manager, 9 class handlers
+- Casters now stand and cast to pull (no melee run-up)
+- Hunters use Auto Shot at 25 yard range
+- Melee classes charge in as expected
+
 ### 2025-01-11 - Horde Bot Fix
 - Fixed Orc, Tauren, Troll bots standing idle - increased mob search range from 50 to 150 yards
 - Horde starting areas have mobs further from spawn point than Alliance areas
@@ -211,4 +311,4 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 *Last Updated: 2025-01-11*
-*Current State: Phase 4 complete. All races (Alliance + Horde) now work correctly. Bots grind, loot, rest, handle death, vendor, and persist correctly across restarts. Next: Phase 5 (movement/exploration).*
+*Current State: Phase 4.5 complete (Combat Refactor). Bots now engage appropriately by class - casters cast to pull, hunters use Auto Shot, melee charges in. Next: Phase 5 (movement/exploration).*

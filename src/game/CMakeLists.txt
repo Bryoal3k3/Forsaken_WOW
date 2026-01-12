@@ -203,6 +203,16 @@ set (game_SRCS
     PlayerBots/Strategies/GhostWalkingStrategy.cpp
     PlayerBots/Strategies/VendoringStrategy.cpp
     PlayerBots/Strategies/LootingBehavior.cpp
+    PlayerBots/Combat/BotCombatMgr.cpp
+    PlayerBots/Combat/Classes/WarriorCombat.cpp
+    PlayerBots/Combat/Classes/PaladinCombat.cpp
+    PlayerBots/Combat/Classes/HunterCombat.cpp
+    PlayerBots/Combat/Classes/MageCombat.cpp
+    PlayerBots/Combat/Classes/PriestCombat.cpp
+    PlayerBots/Combat/Classes/WarlockCombat.cpp
+    PlayerBots/Combat/Classes/RogueCombat.cpp
+    PlayerBots/Combat/Classes/ShamanCombat.cpp
+    PlayerBots/Combat/Classes/DruidCombat.cpp
     Protocol/Opcodes.cpp
     Protocol/WorldSocket.h
     Protocol/WorldSocket.cpp
@@ -436,6 +446,17 @@ set (game_SRCS
     PlayerBots/Strategies/GhostWalkingStrategy.h
     PlayerBots/Strategies/VendoringStrategy.h
     PlayerBots/Strategies/LootingBehavior.h
+    PlayerBots/Combat/IClassCombat.h
+    PlayerBots/Combat/BotCombatMgr.h
+    PlayerBots/Combat/Classes/WarriorCombat.h
+    PlayerBots/Combat/Classes/PaladinCombat.h
+    PlayerBots/Combat/Classes/HunterCombat.h
+    PlayerBots/Combat/Classes/MageCombat.h
+    PlayerBots/Combat/Classes/PriestCombat.h
+    PlayerBots/Combat/Classes/WarlockCombat.h
+    PlayerBots/Combat/Classes/RogueCombat.h
+    PlayerBots/Combat/Classes/ShamanCombat.h
+    PlayerBots/Combat/Classes/DruidCombat.h
     Protocol/Opcodes.h
     Spells/Spell.h
     Spells/SpellAuraDefines.h
@@ -520,6 +541,8 @@ include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/PacketBroadcast
   ${CMAKE_CURRENT_SOURCE_DIR}/PlayerBots
   ${CMAKE_CURRENT_SOURCE_DIR}/PlayerBots/Strategies
+  ${CMAKE_CURRENT_SOURCE_DIR}/PlayerBots/Combat
+  ${CMAKE_CURRENT_SOURCE_DIR}/PlayerBots/Combat/Classes
   ${CMAKE_CURRENT_SOURCE_DIR}/Protocol
   ${CMAKE_CURRENT_SOURCE_DIR}/Spells
   ${CMAKE_CURRENT_SOURCE_DIR}/Threat

@@ -57,20 +57,42 @@ Create autonomous RandomBot AI system where bots:
 ### Structure
 ```
 src/game/PlayerBots/
-├── RandomBotAI.h/cpp           ← Bot AI (combat code here)
+├── RandomBotAI.h/cpp           ← Bot AI (main brain, coordinates all systems)
 ├── RandomBotGenerator.h/cpp    ← Auto-generation on first launch
 ├── PlayerBotMgr.h/cpp          ← Bot lifecycle management
+├── BotCheats.h/cpp             ← Cheat utilities (resting)
 │
-└── Strategies/                 ← High-level behavior (Phase 2+)
-    ├── IBotStrategy.h          ← Interface
-    └── GrindingStrategy.h/cpp  ← Find mob → kill → loot → rest → repeat
+├── Combat/                     ← Combat system (class-specific handlers)
+│   ├── IClassCombat.h          ← Interface for class handlers
+│   ├── BotCombatMgr.h/cpp      ← Combat coordinator
+│   └── Classes/                ← Per-class combat handlers (9 classes)
+│       ├── WarriorCombat.h/cpp
+│       ├── MageCombat.h/cpp
+│       ├── HunterCombat.h/cpp
+│       └── ... (all 9 classes)
+│
+└── Strategies/                 ← High-level behavior
+    ├── IBotStrategy.h          ← Strategy interface
+    ├── GrindingStrategy.h/cpp  ← Find mob → kill
+    ├── LootingBehavior.h/cpp   ← Loot corpses after combat
+    ├── GhostWalkingStrategy.h/cpp ← Death handling
+    └── VendoringStrategy.h/cpp ← Sell items, repair gear
 ```
 
-### Strategy vs. Combat Separation
+### Layer Responsibilities
 | Layer | Responsibility |
 |-------|---------------|
-| **Strategy** | High-level goals: what to do next (find mob, rest, sell) |
-| **Combat** | Spell rotations: how to fight (stays in RandomBotAI) |
+| **RandomBotAI** | Main brain - coordinates strategies, combat manager, behaviors |
+| **BotCombatMgr** | Combat coordinator - creates/delegates to class handlers |
+| **IClassCombat** | Class-specific combat - engagement, rotations, buffs |
+| **Strategies** | High-level goals - what to do next (find mob, rest, sell) |
+
+### Class Engagement Types
+| Class Type | Engagement Behavior |
+|------------|---------------------|
+| **Melee** (Warrior, Rogue, Paladin, Shaman, Druid) | `Attack()` + `MoveChase()` |
+| **Caster** (Mage, Priest, Warlock) | `SetTargetGuid()` only - first spell pulls |
+| **Hunter** | Auto Shot at 25 yard range |
 
 ---
 
@@ -78,10 +100,12 @@ src/game/PlayerBots/
 
 | File | Purpose |
 |------|---------|
-| `RandomBotAI.cpp` | Bot AI - combat rotations for all 9 classes |
+| `RandomBotAI.cpp` | Bot AI - main brain, coordinates all systems |
+| `BotCombatMgr.cpp` | Combat coordinator - creates class handlers |
+| `Combat/Classes/*Combat.cpp` | Per-class combat handlers (9 files) |
 | `RandomBotGenerator.cpp` | Creates bot accounts/characters on first launch |
 | `PlayerBotMgr.cpp` | Bot spawning, loading, lifecycle |
-| `CombatBotBaseAI.cpp` | Combat utilities (spell casting, targeting) |
+| `CombatBotBaseAI.cpp` | Combat utilities (spell casting, targeting, spell data) |
 | `PartyBotAI.cpp` | Working bot example - study for patterns |
 | `PlayerBotAI.cpp:361-377` | `CreatePlayerBotAI()` - register new AI types here |
 
@@ -177,4 +201,4 @@ mysql -u mangos -pmangos realmd      # Accounts DB (RNDBOT accounts)
 
 ---
 
-*Last Updated: 2025-01-10*
+*Last Updated: 2025-01-11*

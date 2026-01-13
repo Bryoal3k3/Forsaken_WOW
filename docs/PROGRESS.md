@@ -156,21 +156,22 @@ if (IsBot())
 **What bots CAN do:**
 1. Auto-generate on first server launch (accounts + characters)
 2. Spawn in the world without GUID conflicts
-3. Apply self-buffs when out of combat
-4. Fight back when attacked (class-appropriate combat rotations)
-5. **Engage targets appropriately by class:**
+3. Be whispered by players (properly registered in ObjectAccessor)
+4. Apply self-buffs when out of combat
+5. Fight back when attacked (class-appropriate combat rotations)
+6. **Engage targets appropriately by class:**
    - Melee classes (Warrior, Rogue, Paladin, Shaman, Druid) charge in
    - Casters (Mage, Priest, Warlock) stand and cast - no melee run-up
    - Hunters use Auto Shot at 25 yard range
-6. Autonomously find and attack mobs (including neutral/yellow mobs)
-7. Skip mobs already tapped by other players/bots
-8. Loot corpses after combat (gold + items)
-9. Rest when low HP/mana (sit + cheat regen, no consumables needed)
-10. Handle death - release spirit, ghost walk to corpse, resurrect
-11. Death loop detection - use spirit healer if dying too often
-12. Vendor when bags full or gear broken - walk to nearest vendor
-13. Sell all items and repair gear at vendor
-14. Persist correctly across server restarts (account IDs preserved)
+7. Autonomously find and attack mobs (including neutral/yellow mobs)
+8. Skip mobs already tapped by other players/bots
+9. Loot corpses after combat (gold + items)
+10. Rest when low HP/mana (sit + cheat regen, no consumables needed)
+11. Handle death - release spirit, ghost walk to corpse, resurrect
+12. Death loop detection - use spirit healer if dying too often
+13. Vendor when bags full or gear broken - walk to nearest vendor
+14. Sell all items and repair gear at vendor
+15. Persist correctly across server restarts (account IDs preserved)
 
 **What bots CANNOT do yet:**
 - Travel/explore to find new grinding areas (stuck at vendor location after vendoring)
@@ -272,6 +273,13 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2025-01-12 - Bot Registration Fix (Whispers Now Work)
+- **Problem**: Bots couldn't be whispered, and ObjectAccessor lookups by name failed
+- **Root Cause**: `ObjectAccessor::AddObject()` stored names without normalization (e.g., "norosu"), but `FindPlayerByName()` and `FindMasterPlayer()` normalized search terms to title case (e.g., "Norosu")
+- **Fix**: Modified `ObjectAccessor::AddObject()` and `RemoveObject()` to normalize names before adding/removing from name maps
+- **Files Modified**: `src/game/ObjectAccessor.cpp`
+- **Result**: Bots are now whisperable, all ObjectAccessor lookups work correctly
+
 ### 2025-01-11 - Combat System Refactor (Phase 4.5)
 - Refactored combat engagement to be class-appropriate
 - Created modular combat handler architecture (BotCombatMgr + IClassCombat)
@@ -310,5 +318,5 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ---
 
-*Last Updated: 2025-01-11*
-*Current State: Phase 4.5 complete (Combat Refactor). Bots now engage appropriately by class - casters cast to pull, hunters use Auto Shot, melee charges in. Next: Phase 5 (movement/exploration).*
+*Last Updated: 2025-01-12*
+*Current State: Phase 4.5 complete. Fixed bot registration bug - bots are now whisperable. Next: Phase 5 (movement/exploration).*

@@ -11,6 +11,7 @@
 #include "Player.h"
 #include "Unit.h"
 #include "MotionMaster.h"
+#include "Log.h"
 
 HunterCombat::HunterCombat(CombatBotBaseAI* pAI)
     : m_pAI(pAI)
@@ -19,23 +20,22 @@ HunterCombat::HunterCombat(CombatBotBaseAI* pAI)
 
 bool HunterCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    // Set target
-    pBot->SetTargetGuid(pTarget->GetObjectGuid());
-
-    // Move to ranged position (~25 yards)
-    float dist = pBot->GetDistance(pTarget);
-    if (dist > 30.0f || dist < 8.0f)
+    // Use Attack(false) to establish combat state without melee swings
+    // This sets GetVictim() and adds us to mob's attacker list
+    if (pBot->Attack(pTarget, false))
     {
+        // Move to optimal ranged position (~25 yards)
+        // Auto Shot will be started in UpdateCombat once positioned
         pBot->GetMotionMaster()->MoveChase(pTarget, 25.0f);
+
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[HunterCombat] %s engaging %s (Attack success, moving to range)",
+            pBot->GetName(), pTarget->GetName());
+        return true;
     }
 
-    // Start Auto Shot (spell ID 75)
-    if (pBot->HasSpell(SPELL_AUTO_SHOT) && !pBot->IsMoving() && !pBot->IsNonMeleeSpellCasted())
-    {
-        pBot->CastSpell(pTarget, SPELL_AUTO_SHOT, false);
-    }
-
-    return true;
+    sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[HunterCombat] %s failed to engage %s (Attack returned false)",
+        pBot->GetName(), pTarget->GetName());
+    return false;
 }
 
 void HunterCombat::UpdateCombat(Player* pBot, Unit* pVictim)

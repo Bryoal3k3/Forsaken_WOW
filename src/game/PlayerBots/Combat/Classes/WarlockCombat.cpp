@@ -11,6 +11,7 @@
 #include "Player.h"
 #include "Unit.h"
 #include "MotionMaster.h"
+#include "Log.h"
 
 WarlockCombat::WarlockCombat(CombatBotBaseAI* pAI)
     : m_pAI(pAI)
@@ -19,10 +20,19 @@ WarlockCombat::WarlockCombat(CombatBotBaseAI* pAI)
 
 bool WarlockCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    // Casters don't melee auto-attack
-    // Just set target - the first rotation spell will pull
-    pBot->SetTargetGuid(pTarget->GetObjectGuid());
-    return true;
+    // Use Attack(false) to establish combat state without melee swings
+    // This sets GetVictim() and adds us to mob's attacker list
+    // First spell in UpdateCombat() will deal damage and fully engage
+    if (pBot->Attack(pTarget, false))
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[WarlockCombat] %s engaging %s (Attack success)",
+            pBot->GetName(), pTarget->GetName());
+        return true;
+    }
+
+    sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[WarlockCombat] %s failed to engage %s (Attack returned false)",
+        pBot->GetName(), pTarget->GetName());
+    return false;
 }
 
 void WarlockCombat::UpdateCombat(Player* pBot, Unit* pVictim)

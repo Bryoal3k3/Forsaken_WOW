@@ -300,22 +300,32 @@ ObjectAccessor::NameToMasterPlayerPtr ObjectAccessor::playerNameToMasterPlayerPo
 void ObjectAccessor::AddObject(Player* player)
 {
     HashMapHolder<Player>::Insert(player);
-    playerNameToPlayerPointer[player->GetName()] = player;
+    // Normalize name for consistent lookup (FindPlayerByName normalizes search names)
+    std::string normalizedName = player->GetName();
+    normalizePlayerName(normalizedName);
+    playerNameToPlayerPointer[normalizedName] = player;
 }
 void ObjectAccessor::RemoveObject(Player* player)
 {
     HashMapHolder<Player>::Remove(player);
-    playerNameToPlayerPointer.erase(player->GetName());
+    std::string normalizedName = player->GetName();
+    normalizePlayerName(normalizedName);
+    playerNameToPlayerPointer.erase(normalizedName);
 }
 void ObjectAccessor::AddObject(MasterPlayer* player)
 {
     HashMapHolder<MasterPlayer>::Insert(player);
-    playerNameToMasterPlayerPointer[player->GetName()] = player;
+    // Normalize name for consistent lookup (FindMasterPlayer normalizes search names)
+    std::string normalizedName = player->GetName();
+    normalizePlayerName(normalizedName);
+    playerNameToMasterPlayerPointer[normalizedName] = player;
 }
 void ObjectAccessor::RemoveObject(MasterPlayer* player)
 {
     HashMapHolder<MasterPlayer>::Remove(player);
-    playerNameToMasterPlayerPointer.erase(player->GetName());
+    std::string normalizedName = player->GetName();
+    normalizePlayerName(normalizedName);
+    playerNameToMasterPlayerPointer.erase(normalizedName);
 }
 // Define the static member of HashMapHolder
 

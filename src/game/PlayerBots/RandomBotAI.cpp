@@ -149,7 +149,10 @@ void RandomBotAI::UpdateAI(uint32 const diff)
         return;  // Busy resting
 
     // Combat logic
-    if (inCombat && me->GetVictim())
+    // Use OR instead of AND: run combat AI if in combat OR if we have a victim
+    // This fixes ranged classes where Attack(false) sets victim but doesn't enter combat
+    // until the first spell deals damage
+    if (inCombat || me->GetVictim())
     {
         UpdateInCombatAI();
     }

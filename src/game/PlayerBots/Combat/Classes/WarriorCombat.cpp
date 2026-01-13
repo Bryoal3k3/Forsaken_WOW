@@ -11,6 +11,7 @@
 #include "Player.h"
 #include "Unit.h"
 #include "MotionMaster.h"
+#include "Log.h"
 
 WarriorCombat::WarriorCombat(CombatBotBaseAI* pAI)
     : m_pAI(pAI)
@@ -23,8 +24,12 @@ bool WarriorCombat::Engage(Player* pBot, Unit* pTarget)
     if (pBot->Attack(pTarget, true))
     {
         pBot->GetMotionMaster()->MoveChase(pTarget);
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[WarriorCombat] %s engaging %s (Attack success)",
+            pBot->GetName(), pTarget->GetName());
         return true;
     }
+    sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[WarriorCombat] %s failed to engage %s (Attack returned false)",
+        pBot->GetName(), pTarget->GetName());
     return false;
 }
 

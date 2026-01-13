@@ -50,6 +50,11 @@ bool GrindingStrategy::Update(Player* pBot, uint32 /*diff*/)
     if (!pBot || !pBot->IsAlive() || pBot->IsInCombat())
         return false;
 
+    // Already have a victim? We're engaged, just waiting for combat to start
+    // (e.g., caster has Attack() called but first spell hasn't landed yet)
+    if (pBot->GetVictim())
+        return true;  // Busy - don't try to find another target
+
     // Find a mob to attack
     Creature* pTarget = FindGrindTarget(pBot, SEARCH_RANGE);
     if (pTarget)

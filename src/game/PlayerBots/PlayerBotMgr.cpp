@@ -480,7 +480,9 @@ bool PlayerBotMgr::AddBot(uint32 playerGUID, bool chatBot, PlayerBotAI* pAI)
     e->state = PB_STATE_LOADING;
     WorldSession* session = new WorldSession(accountId, nullptr, sAccountMgr.GetSecurity(accountId), 0, LOCALE_enUS);
     session->SetBot(e);
-    sWorld.AddSession(session);
+    // Add directly to sessions map instead of queue to avoid race condition
+    // where LoginPlayer's async callback can't find the session
+    sWorld.AddSessionToSessionsMap(session);
     m_stats.loadingCount++;
     if (chatBot)
         AddTempBot(accountId, 20000);

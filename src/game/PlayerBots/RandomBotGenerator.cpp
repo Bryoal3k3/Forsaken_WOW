@@ -167,6 +167,10 @@ void RandomBotGenerator::PurgeAllRandomBots()
     }
 
     sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[RandomBotGenerator] Purge complete. Deleted %zu accounts.", accountIds.size());
+
+    // Reset the character GUID counter to reflect the actual database state
+    // This prevents new bots from getting unnecessarily high GUIDs
+    sObjectMgr.ReloadCharacterGuids();
 }
 
 // ============================================================================

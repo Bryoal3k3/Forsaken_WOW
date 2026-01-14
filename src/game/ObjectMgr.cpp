@@ -7712,6 +7712,12 @@ void ObjectMgr::SetHighestGuids()
     m_FirstTemporaryGameObjectGuid += sWorld.getConfig(CONFIG_UINT32_GUID_RESERVE_SIZE_GAMEOBJECT);
 }
 
+void ObjectMgr::ReloadCharacterGuids()
+{
+    m_CharGuids.LoadFromDB("guid", "characters");
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Character GUIDs reloaded. Next GUID: %u", m_CharGuids.GetNextAfterMaxUsed());
+}
+
 uint32 ObjectMgr::CreateItemText(std::string text)
 {
     uint32 newItemTextId = GenerateItemTextID();

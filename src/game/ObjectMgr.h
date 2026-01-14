@@ -979,6 +979,7 @@ class ObjectMgr
         uint32 GenerateItemLowGuid() { return m_ItemGuids.Generate(); }
         uint32 GenerateCorpseLowGuid() { return m_CorpseGuids.Generate(); }
         void FreeItemLowGuid(uint32 g) { return m_ItemGuids.FreeGuid(g); }
+        void ReloadCharacterGuids();
 
         uint32 GenerateAuctionID();
         void FreeAuctionID(uint32 id);

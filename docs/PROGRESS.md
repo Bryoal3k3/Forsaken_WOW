@@ -273,6 +273,16 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2025-01-12 - Purge GUID Counter Fix
+- **Problem**: After purging bots with `RandomBot.Purge`, newly generated bots would get unnecessarily high GUIDs (e.g., 51+ instead of 1+)
+- **Root Cause**: `ObjectMgr::m_CharGuids` counter is loaded from DB at startup via `SetHighestGuids()`. When purge deletes bots, the counter is NOT reset, so new bots continue from the old max GUID.
+- **Fix**: Added `ObjectMgr::ReloadCharacterGuids()` method that reloads the GUID counter from the database. Called at end of `PurgeAllRandomBots()`.
+- **Files Modified**:
+  - `src/game/ObjectMgr.h` - Added `ReloadCharacterGuids()` declaration
+  - `src/game/ObjectMgr.cpp` - Implemented `ReloadCharacterGuids()`
+  - `src/game/PlayerBots/RandomBotGenerator.cpp` - Call `ReloadCharacterGuids()` after purge
+- **Result**: After purge, new bots get GUIDs starting from the correct value (respecting any remaining player characters)
+
 ### 2025-01-12 - Bot Registration Fix (Whispers Now Work)
 - **Problem**: Bots couldn't be whispered, and ObjectAccessor lookups by name failed
 - **Root Cause**: `ObjectAccessor::AddObject()` stored names without normalization (e.g., "norosu"), but `FindPlayerByName()` and `FindMasterPlayer()` normalized search terms to title case (e.g., "Norosu")
@@ -319,4 +329,4 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 *Last Updated: 2025-01-12*
-*Current State: Phase 4.5 complete. Fixed bot registration bug - bots are now whisperable. Next: Phase 5 (movement/exploration).*
+*Current State: Phase 4.5 complete. Fixed purge GUID counter bug. Next: Phase 5 (movement/exploration).*

@@ -14,6 +14,18 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
+
+// Race-specific name generation data
+struct RaceNameData
+{
+    std::vector<std::string> prefixes;
+    std::vector<std::string> middles;
+    std::vector<std::string> maleEndings;
+    std::vector<std::string> femaleEndings;
+    uint8 minSyllables;
+    uint8 maxSyllables;
+};
 
 class RandomBotGenerator
 {
@@ -50,7 +62,9 @@ private:
     // Helper functions
     uint32 GetNextFreeAccountId();
     uint32 GetNextFreeCharacterGuid();
-    std::string GenerateUniqueBotName();
+    std::string GenerateUniqueBotName(uint8 race, uint8 gender);
+    std::string GenerateRaceName(uint8 race, uint8 gender);
+    bool ValidateGeneratedName(std::string const& name);
     void GetStartingPosition(uint8 race, uint32& mapId, float& x, float& y, float& z, float& o);
     uint8 SelectRandomRaceForClass(uint8 classId);
 
@@ -58,6 +72,12 @@ private:
     void InitializeRaceClassData();
     std::map<uint8, std::vector<uint8>> m_classRaces;
     std::vector<uint8> m_allClasses;
+
+    // Race-specific name generation
+    void InitializeNameData();
+    std::map<uint8, RaceNameData> m_raceNameData;
+    std::set<std::string> m_blacklistedNames;
+    bool m_nameDataInitialized = false;
 
     // Track generated names to avoid duplicates within a session
     std::vector<std::string> m_generatedNames;

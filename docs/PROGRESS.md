@@ -273,6 +273,26 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2025-01-13 - Race-Specific Name Generation
+- **Feature**: Bot names now match their race/gender using Warcraft-style syllable patterns
+- **Implementation**: Added syllable-based name generator to `RandomBotGenerator`
+- **Name Patterns by Race**:
+  | Race | Style | Examples |
+  |------|-------|----------|
+  | Orc | Guttural, harsh | Grom'kar, Drak'thar |
+  | Troll | Tribal, apostrophes | Zul'jan, Vol'kali |
+  | Tauren | Nature, soft | Cairne, Mulgara |
+  | Undead | Dark, twisted | Sylvanas, Drakul |
+  | Human | Medieval Western | Anduin, Lothar |
+  | Dwarf | Nordic, sturdy | Magni, Brann |
+  | Gnome | Whimsical, mechanical | Mekkatorque, Fizzi |
+  | Night Elf | Flowing, melodic | Tyrande, Malfurion |
+- **Validation Rules**: 3-12 characters, no triple consecutive letters, blacklist for famous names
+- **Files Modified**:
+  - `src/game/PlayerBots/RandomBotGenerator.h` - Added `RaceNameData` struct, new methods
+  - `src/game/PlayerBots/RandomBotGenerator.cpp` - Full syllable data for 8 races, name generation logic
+- **Result**: Bots now have immersive, lore-appropriate names
+
 ### 2025-01-13 - Fix Generated Player Names Not Title Case
 - **Problem**: Generated bot names were all lowercase (e.g., "norosu" instead of "Norosu")
 - **Root Cause**: `GeneratePlayerName()` in ObjectMgr.cpp built names from lowercase vowels/consonants without capitalizing
@@ -335,5 +355,5 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ---
 
-*Last Updated: 2025-01-12*
-*Current State: Phase 4.5 complete. Fixed purge GUID counter bug. Next: Phase 5 (movement/exploration).*
+*Last Updated: 2025-01-13*
+*Current State: Phase 4.5 complete. Race-specific name generation added. Next: Phase 5 (movement/exploration).*

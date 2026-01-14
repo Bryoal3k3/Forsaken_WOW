@@ -8310,6 +8310,8 @@ static std::string GeneratePlayerName()
         useVowel = !useVowel;
     }
 
+    // Capitalize first letter for proper player name format
+    name[0] = std::toupper(name[0]);
     return name;
 };
 

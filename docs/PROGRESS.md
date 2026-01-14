@@ -273,6 +273,13 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2025-01-13 - Fix Generated Player Names Not Title Case
+- **Problem**: Generated bot names were all lowercase (e.g., "norosu" instead of "Norosu")
+- **Root Cause**: `GeneratePlayerName()` in ObjectMgr.cpp built names from lowercase vowels/consonants without capitalizing
+- **Fix**: Added `name[0] = std::toupper(name[0]);` before returning the generated name
+- **Files Modified**: `src/game/ObjectMgr.cpp`
+- **Result**: All generated player names now have proper title case
+
 ### 2025-01-12 - Purge GUID Counter Fix
 - **Problem**: After purging bots with `RandomBot.Purge`, newly generated bots would get unnecessarily high GUIDs (e.g., 51+ instead of 1+)
 - **Root Cause**: `ObjectMgr::m_CharGuids` counter is loaded from DB at startup via `SetHighestGuids()`. When purge deletes bots, the counter is NOT reset, so new bots continue from the old max GUID.

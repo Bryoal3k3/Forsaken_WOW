@@ -273,18 +273,14 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
-### 2025-01-16 - Bot Combat Bug Fix (Mobs Not Aggroing)
-- **Problem**: Bots could attack mobs, but mobs wouldn't aggro back. Bots didn't get kill credit and mobs kept regenerating health.
-- **Root Cause**: New bot characters spawned with intro cinematic pending (`GetCurrentCinematicEntry() != 0`). This made them fail the `IsTargetableBy()` check in Unit.cpp, so mobs couldn't select them as attack targets.
-- **Why It Happened**: The cinematic is triggered at login when `played_time_total == 0` (brand new character). Bot generation set this to 0.
-- **Fix**:
-  1. **Root fix**: Changed `RandomBotGenerator.cpp` to set `played_time_total=1` in the character INSERT, preventing the cinematic from ever triggering.
-  2. **Backup fix**: Added `CinematicEnd()` call in `RandomBotAI::UpdateAI()` initialization for any existing bots.
-  3. Removed `UNIT_FLAG_SPAWNING` from `OnPlayerLogin()` (was causing other issues).
+### 2025-01-16 - Bot Combat Bug Fix (Mobs Not Aggroing + Starting Gear)
+- **Problem**: Bots couldn't be targeted by mobs (cinematic pending) and spawned naked (no starting gear).
+- **Root Cause**: New characters with `played_time_total == 0` trigger intro cinematic, making them untargetable. Initial fix (setting played_time=1) broke `AddStartingItems()` which also checks for played_time=0.
+- **Fix**: Added `!pCurrChar->IsBot()` check to cinematic trigger in CharacterHandler.cpp. Bots keep played_time=0 (get starting gear) but skip cinematic.
 - **Files Modified**:
-  - `src/game/PlayerBots/RandomBotGenerator.cpp` - Set played_time_total=1
-  - `src/game/PlayerBots/RandomBotAI.cpp` - Added CinematicEnd(), removed UNIT_FLAG_SPAWNING
-- **Result**: Mobs now properly aggro bots, combat works correctly.
+  - `src/game/Handlers/CharacterHandler.cpp` - Added IsBot() check to cinematic condition
+  - `src/game/PlayerBots/RandomBotAI.cpp` - Backup CinematicEnd() call (safety fallback)
+- **Result**: Bots spawn with starting gear and are properly targetable by mobs.
 
 ### 2025-01-16 - Caster Bot Fix (Not Moving or Casting)
 - **Problem**: Caster bots (Mage, Warlock, Priest) stood at spawn targeting mobs but never moved, turned, or cast spells.

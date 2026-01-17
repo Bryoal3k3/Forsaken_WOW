@@ -268,7 +268,7 @@ uint32 RandomBotGenerator::CreateBotCharacter(uint32 charGuid, uint32 accountId,
         "VALUES (%u, %u, '%s', %u, %u, %u, %u, 0, 0, "
         "%u, %u, %u, %u, %u, 0, 0, "
         "%u, %f, %f, %f, %f, "
-        "0, 1, 0, 0, 0, "  // played_time_total=1 prevents intro cinematic
+        "0, 0, 0, 0, 0, "  // played_time_total=0 allows starting items (cinematic skipped via IsBot check)
         "0, 0, 0, 0, 0, "
         "0, 0, 0, 0, "
         "0, 0, 0, 0, "

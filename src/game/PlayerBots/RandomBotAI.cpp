@@ -56,8 +56,8 @@ bool RandomBotAI::OnSessionLoaded(PlayerBotEntry* entry, WorldSession* sess)
 
 void RandomBotAI::OnPlayerLogin()
 {
-    if (!m_initialized)
-        me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SPAWNING);
+    // NOTE: Initialization is handled in UpdateAI() during the first tick
+    // This ensures the player is fully loaded from DB before we modify state
 }
 
 void RandomBotAI::UpdateAI(uint32 const diff)
@@ -97,6 +97,12 @@ void RandomBotAI::UpdateAI(uint32 const diff)
         // Disable GM mode if it was somehow enabled
         if (me->IsGameMaster())
             me->SetGameMaster(false);
+
+        // Clear intro cinematic - new characters spawn with cinematic pending
+        // which makes them untargetable until "watched". Must be here, not OnPlayerLogin,
+        // because LoadFromDB sets the cinematic after OnPlayerLogin is called.
+        if (me->GetCurrentCinematicEntry() != 0)
+            me->CinematicEnd();
 
         // Learn spells and populate spell data for combat
         ResetSpellData();

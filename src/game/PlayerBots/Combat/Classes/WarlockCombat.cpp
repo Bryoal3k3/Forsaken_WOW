@@ -25,7 +25,10 @@ bool WarlockCombat::Engage(Player* pBot, Unit* pTarget)
     // First spell in UpdateCombat() will deal damage and fully engage
     if (pBot->Attack(pTarget, false))
     {
-        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[WarlockCombat] %s engaging %s (Attack success)",
+        // Move into casting range (28 yards gives buffer for 30-yard spells)
+        pBot->GetMotionMaster()->MoveChase(pTarget, 28.0f);
+
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[WarlockCombat] %s engaging %s (Attack success, moving to range)",
             pBot->GetName(), pTarget->GetName());
         return true;
     }

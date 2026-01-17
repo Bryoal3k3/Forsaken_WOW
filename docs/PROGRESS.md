@@ -161,7 +161,7 @@ if (IsBot())
 5. Fight back when attacked (class-appropriate combat rotations)
 6. **Engage targets appropriately by class:**
    - Melee classes (Warrior, Rogue, Paladin, Shaman, Druid) charge in
-   - Casters (Mage, Priest, Warlock) stand and cast - no melee run-up
+   - Casters (Mage, Priest, Warlock) move into range (28 yards) and cast
    - Hunters use Auto Shot at 25 yard range
 7. Autonomously find and attack mobs (including neutral/yellow mobs)
 8. Skip mobs already tapped by other players/bots
@@ -273,6 +273,29 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2025-01-16 - Bot Combat Bug Fix (Mobs Not Aggroing)
+- **Problem**: Bots could attack mobs, but mobs wouldn't aggro back. Bots didn't get kill credit and mobs kept regenerating health.
+- **Root Cause**: New bot characters spawned with intro cinematic pending (`GetCurrentCinematicEntry() != 0`). This made them fail the `IsTargetableBy()` check in Unit.cpp, so mobs couldn't select them as attack targets.
+- **Why It Happened**: The cinematic is triggered at login when `played_time_total == 0` (brand new character). Bot generation set this to 0.
+- **Fix**:
+  1. **Root fix**: Changed `RandomBotGenerator.cpp` to set `played_time_total=1` in the character INSERT, preventing the cinematic from ever triggering.
+  2. **Backup fix**: Added `CinematicEnd()` call in `RandomBotAI::UpdateAI()` initialization for any existing bots.
+  3. Removed `UNIT_FLAG_SPAWNING` from `OnPlayerLogin()` (was causing other issues).
+- **Files Modified**:
+  - `src/game/PlayerBots/RandomBotGenerator.cpp` - Set played_time_total=1
+  - `src/game/PlayerBots/RandomBotAI.cpp` - Added CinematicEnd(), removed UNIT_FLAG_SPAWNING
+- **Result**: Mobs now properly aggro bots, combat works correctly.
+
+### 2025-01-16 - Caster Bot Fix (Not Moving or Casting)
+- **Problem**: Caster bots (Mage, Warlock, Priest) stood at spawn targeting mobs but never moved, turned, or cast spells.
+- **Root Cause**: Caster `Engage()` methods called `Attack(target, false)` but never moved toward the target. Mobs were found up to 150 yards away, but spell range is only 30 yards. `CanTryToCastSpell()` correctly rejected all casts due to range check.
+- **Fix**: Added `MoveChase(pTarget, 28.0f)` to caster Engage() methods, matching Hunter's approach.
+- **Files Modified**:
+  - `src/game/PlayerBots/Combat/Classes/MageCombat.cpp`
+  - `src/game/PlayerBots/Combat/Classes/WarlockCombat.cpp`
+  - `src/game/PlayerBots/Combat/Classes/PriestCombat.cpp`
+- **Result**: Casters now move into range and cast spells correctly.
+
 ### 2025-01-13 - Race-Specific Name Generation
 - **Feature**: Bot names now match their race/gender using Warcraft-style syllable patterns
 - **Implementation**: Added syllable-based name generator to `RandomBotGenerator`
@@ -355,5 +378,5 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ---
 
-*Last Updated: 2025-01-13*
-*Current State: Phase 4.5 complete. Race-specific name generation added. Next: Phase 5 (movement/exploration).*
+*Last Updated: 2025-01-16*
+*Current State: Phase 4.5 complete. All classes working (caster range fix). Next: Phase 5 (movement/exploration).*

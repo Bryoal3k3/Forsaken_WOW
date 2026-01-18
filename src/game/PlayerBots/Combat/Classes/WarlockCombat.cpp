@@ -43,6 +43,21 @@ void WarlockCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     if (!pVictim)
         return;
 
+    // Only kite if target is snared/rooted, otherwise stand and fight
+    bool targetIsSnared = pVictim->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED) ||
+                          pVictim->HasAuraType(SPELL_AURA_MOD_ROOT);
+
+    float dist = pBot->GetDistance(pVictim);
+    bool inCastRange = dist <= 30.0f;
+
+    // Only stop movement if we're in casting range AND target isn't snared
+    // This allows approach movement to continue until we can cast
+    if (inCastRange && !targetIsSnared && pBot->IsMoving())
+    {
+        pBot->StopMoving();
+        pBot->GetMotionMaster()->Clear();
+    }
+
     // Corruption
     if (m_pAI->m_spells.warlock.pCorruption &&
         !pVictim->HasAura(m_pAI->m_spells.warlock.pCorruption->Id) &&

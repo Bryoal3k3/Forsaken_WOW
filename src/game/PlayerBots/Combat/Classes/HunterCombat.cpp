@@ -43,10 +43,53 @@ void HunterCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     if (!pVictim)
         return;
 
+    // Check if target is snared/rooted
+    bool targetIsSnared = pVictim->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED) ||
+                          pVictim->HasAuraType(SPELL_AURA_MOD_ROOT);
+
+    float dist = pBot->GetDistance(pVictim);
+    bool inCastRange = dist <= 30.0f;
+
+    // Only stop movement if we're in range AND target isn't snared
+    // This allows approach movement to continue until we can attack
+    if (inCastRange && !targetIsSnared && pBot->IsMoving())
+    {
+        pBot->StopMoving();
+        pBot->GetMotionMaster()->Clear();
+    }
+
+    // Melee combat - when victim can hit us (deadzone)
+    if (pVictim->CanReachWithMeleeAutoAttack(pBot))
+    {
+        // Wing Clip to snare
+        if (m_pAI->m_spells.hunter.pWingClip &&
+            m_pAI->CanTryToCastSpell(pVictim, m_pAI->m_spells.hunter.pWingClip))
+        {
+            m_pAI->DoCastSpell(pVictim, m_pAI->m_spells.hunter.pWingClip);
+        }
+
+        // Mongoose Bite
+        if (m_pAI->m_spells.hunter.pMongooseBite &&
+            m_pAI->CanTryToCastSpell(pVictim, m_pAI->m_spells.hunter.pMongooseBite))
+        {
+            m_pAI->DoCastSpell(pVictim, m_pAI->m_spells.hunter.pMongooseBite);
+        }
+
+        // Raptor Strike
+        if (m_pAI->m_spells.hunter.pRaptorStrike &&
+            m_pAI->CanTryToCastSpell(pVictim, m_pAI->m_spells.hunter.pRaptorStrike))
+        {
+            m_pAI->DoCastSpell(pVictim, m_pAI->m_spells.hunter.pRaptorStrike);
+        }
+
+        return; // Don't try ranged attacks in melee
+    }
+
+    // --- Ranged Combat (outside deadzone) ---
+
     // Maintain Auto Shot
     if (pBot->HasSpell(SPELL_AUTO_SHOT) &&
         !pBot->IsMoving() &&
-        (pBot->GetCombatDistance(pVictim) > 8.0f) &&
         !pBot->IsNonMeleeSpellCasted())
     {
         pBot->CastSpell(pVictim, SPELL_AUTO_SHOT, false);

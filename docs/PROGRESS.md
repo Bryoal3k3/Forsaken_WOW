@@ -273,6 +273,20 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2025-01-17 - Ranged Kiting Bug Fix ✅ VERIFIED
+- **Problem**: Low-level ranged bots (Mage, Hunter, Warlock, Priest) would endlessly run backwards instead of fighting. Mobs are faster than players at level 1.
+- **Root Cause**: `MoveChase(target, 28.0f)` creates continuous movement that tries to maintain 28 yards. When mob chases, bot keeps repositioning backward forever.
+- **Initial Fix**: Added snare/root check - bots only kite if target has `SPELL_AURA_MOD_DECREASE_SPEED` or `SPELL_AURA_MOD_ROOT`. Otherwise they stand and fight.
+- **Bug in Initial Fix**: The snare check stopped ALL movement including initial approach. Bots would target mobs but never walk toward them.
+- **Final Fix**: Added distance check - only stop movement if bot is within 30 yards (casting range). This allows approach movement to complete before stopping.
+- **Hunter-specific**: Added melee fallback (Wing Clip, Mongoose Bite, Raptor Strike) for deadzone where ranged attacks don't work.
+- **Files Modified**:
+  - `src/game/PlayerBots/Combat/Classes/MageCombat.cpp` - Snare check + range check
+  - `src/game/PlayerBots/Combat/Classes/HunterCombat.cpp` - Snare check + range check + melee attacks
+  - `src/game/PlayerBots/Combat/Classes/WarlockCombat.cpp` - Snare check + range check
+  - `src/game/PlayerBots/Combat/Classes/PriestCombat.cpp` - Snare check + range check
+- **Status**: ✅ Tested and working
+
 ### 2025-01-16 - Bot Combat Bug Fix (Mobs Not Aggroing + Starting Gear)
 - **Problem**: Bots couldn't be targeted by mobs (cinematic pending) and spawned naked (no starting gear).
 - **Root Cause**: New characters with `played_time_total == 0` trigger intro cinematic, making them untargetable. Initial fix (setting played_time=1) broke `AddStartingItems()` which also checks for played_time=0.
@@ -374,5 +388,5 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ---
 
-*Last Updated: 2025-01-16*
-*Current State: Phase 4.5 complete. All classes working (caster range fix). Next: Phase 5 (movement/exploration).*
+*Last Updated: 2025-01-17*
+*Current State: Phase 4.5 complete. Ranged kiting fix verified. Next: Phase 5 (movement/exploration).*

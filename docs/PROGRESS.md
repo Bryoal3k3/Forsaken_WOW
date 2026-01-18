@@ -26,7 +26,7 @@ Created a new combat architecture with per-class handlers:
 |------------|---------------------|
 | **Melee** (Warrior, Rogue, Paladin, Shaman, Druid) | `Attack()` + `MoveChase()` - run in and melee |
 | **Caster** (Mage, Priest, Warlock) | `SetTargetGuid()` only - first rotation spell pulls |
-| **Hunter** | `SetTargetGuid()` + `MoveChase(25.0f)` + Auto Shot at range |
+| **Hunter** | `SetTargetGuid()` + `MoveChase(25.0f)` + Auto Shot at range, melee fallback when mobs close in |
 
 ### New Architecture
 
@@ -162,7 +162,7 @@ if (IsBot())
 6. **Engage targets appropriately by class:**
    - Melee classes (Warrior, Rogue, Paladin, Shaman, Druid) charge in
    - Casters (Mage, Priest, Warlock) move into range (28 yards) and cast
-   - Hunters use Auto Shot at 25 yard range
+   - Hunters use Auto Shot at 25 yard range, melee fallback when mobs close in
 7. Autonomously find and attack mobs (including neutral/yellow mobs)
 8. Skip mobs already tapped by other players/bots
 9. Loot corpses after combat (gold + items)
@@ -273,16 +273,24 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2025-01-17 - Hunter Melee Fallback Fix ✅ VERIFIED
+- **Problem**: Level 1 hunters would stand idle when mobs reached melee range - no attacks at all.
+- **Root Cause**: Hunters engaged with `Attack(pTarget, false)` which disables melee auto-attack. The melee fallback code tried Wing Clip, Mongoose Bite, Raptor Strike - but level 1 hunters don't have these abilities yet. Code then returned early, doing nothing.
+- **Fix**: Added `Attack(pVictim, true)` and `MoveChase(pVictim)` at the start of the melee block. Now hunters will melee auto-attack when mobs close in, using special abilities when available at higher levels.
+- **Files Modified**:
+  - `src/game/PlayerBots/Combat/Classes/HunterCombat.cpp` - Enable melee auto-attack in deadzone
+- **Status**: ✅ Tested and working
+
 ### 2025-01-17 - Ranged Kiting Bug Fix ✅ VERIFIED
 - **Problem**: Low-level ranged bots (Mage, Hunter, Warlock, Priest) would endlessly run backwards instead of fighting. Mobs are faster than players at level 1.
 - **Root Cause**: `MoveChase(target, 28.0f)` creates continuous movement that tries to maintain 28 yards. When mob chases, bot keeps repositioning backward forever.
 - **Initial Fix**: Added snare/root check - bots only kite if target has `SPELL_AURA_MOD_DECREASE_SPEED` or `SPELL_AURA_MOD_ROOT`. Otherwise they stand and fight.
 - **Bug in Initial Fix**: The snare check stopped ALL movement including initial approach. Bots would target mobs but never walk toward them.
 - **Final Fix**: Added distance check - only stop movement if bot is within 30 yards (casting range). This allows approach movement to complete before stopping.
-- **Hunter-specific**: Added melee fallback (Wing Clip, Mongoose Bite, Raptor Strike) for deadzone where ranged attacks don't work.
+- **Hunter-specific**: Added melee ability checks (Wing Clip, Mongoose Bite, Raptor Strike) for deadzone combat.
 - **Files Modified**:
   - `src/game/PlayerBots/Combat/Classes/MageCombat.cpp` - Snare check + range check
-  - `src/game/PlayerBots/Combat/Classes/HunterCombat.cpp` - Snare check + range check + melee attacks
+  - `src/game/PlayerBots/Combat/Classes/HunterCombat.cpp` - Snare check + range check + melee abilities
   - `src/game/PlayerBots/Combat/Classes/WarlockCombat.cpp` - Snare check + range check
   - `src/game/PlayerBots/Combat/Classes/PriestCombat.cpp` - Snare check + range check
 - **Status**: ✅ Tested and working

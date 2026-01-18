@@ -61,6 +61,10 @@ void HunterCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     // Melee combat - when victim can hit us (deadzone)
     if (pVictim->CanReachWithMeleeAutoAttack(pBot))
     {
+        // Enable melee auto-attack and stay on target
+        pBot->Attack(pVictim, true);
+        pBot->GetMotionMaster()->MoveChase(pVictim);
+
         // Wing Clip to snare
         if (m_pAI->m_spells.hunter.pWingClip &&
             m_pAI->CanTryToCastSpell(pVictim, m_pAI->m_spells.hunter.pWingClip))

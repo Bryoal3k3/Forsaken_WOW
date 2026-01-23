@@ -113,10 +113,10 @@ bool GhostWalkingStrategy::Update(Player* pBot, uint32 /*diff*/)
         return false;
     }
 
-    // Not close enough - move toward corpse
+    // Not close enough - move toward corpse (with pathfinding for collision avoidance)
     if (!m_isWalkingToCorpse || pBot->GetMotionMaster()->GetCurrentMovementGeneratorType() != POINT_MOTION_TYPE)
     {
-        pBot->GetMotionMaster()->MovePoint(0, corpse->GetPositionX(), corpse->GetPositionY(), corpse->GetPositionZ());
+        pBot->GetMotionMaster()->MovePoint(0, corpse->GetPositionX(), corpse->GetPositionY(), corpse->GetPositionZ(), MOVE_PATHFINDING | MOVE_RUN_MODE);
         m_isWalkingToCorpse = true;
     }
 

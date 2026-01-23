@@ -97,9 +97,9 @@ bool LootingBehavior::Update(Player* pBot, uint32 diff)
     }
     else
     {
-        // Move towards the corpse
+        // Move towards the corpse (with pathfinding for collision avoidance)
         pBot->GetMotionMaster()->MovePoint(0, pCorpse->GetPositionX(),
-            pCorpse->GetPositionY(), pCorpse->GetPositionZ());
+            pCorpse->GetPositionY(), pCorpse->GetPositionZ(), MOVE_PATHFINDING | MOVE_RUN_MODE);
         return true; // Still busy
     }
 }

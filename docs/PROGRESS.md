@@ -273,6 +273,17 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2025-01-22 - Enable Navmesh Pathfinding for Bot Movement
+- **Problem**: Bots were walking through terrain (falling through hills/mounds) when using MovePoint for vendoring, ghost walking, and looting.
+- **Root Cause**: `MovePoint()` was called without the `MOVE_PATHFINDING` flag, causing it to create direct 2-point paths that ignore the navmesh.
+- **Fix**: Added `MOVE_PATHFINDING | MOVE_RUN_MODE` flags to all MovePoint calls in bot strategies.
+- **Debug Logging**: Added PathFinder debug output to VendoringStrategy to verify navmesh is being used (shows path type and waypoint count).
+- **Files Modified**:
+  - `src/game/PlayerBots/Strategies/VendoringStrategy.cpp` - Pathfinding + debug logging
+  - `src/game/PlayerBots/Strategies/GhostWalkingStrategy.cpp` - Pathfinding flag
+  - `src/game/PlayerBots/Strategies/LootingBehavior.cpp` - Pathfinding flag
+- **Result**: Bots now use navmesh pathfinding (confirmed 35 waypoints in test). Terrain collision works. Tree/doodad collision is a separate navmesh data issue to investigate later.
+
 ### 2025-01-17 - Hunter Melee Fallback Fix ✅ VERIFIED
 - **Problem**: Level 1 hunters would stand idle when mobs reached melee range - no attacks at all.
 - **Root Cause**: Hunters engaged with `Attack(pTarget, false)` which disables melee auto-attack. The melee fallback code tried Wing Clip, Mongoose Bite, Raptor Strike - but level 1 hunters don't have these abilities yet. Code then returned early, doing nothing.
@@ -396,5 +407,5 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ---
 
-*Last Updated: 2025-01-17*
-*Current State: Phase 4.5 complete. Ranged kiting fix verified. Next: Phase 5 (movement/exploration).*
+*Last Updated: 2025-01-22*
+*Current State: Phase 4.5 complete. Navmesh pathfinding enabled for bot movement. Next: Phase 5 (movement/exploration).*

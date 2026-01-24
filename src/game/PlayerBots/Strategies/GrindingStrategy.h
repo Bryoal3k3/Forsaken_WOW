@@ -11,6 +11,7 @@
 
 #include "IBotStrategy.h"
 
+class BotCombatMgr;
 class Creature;
 class Player;
 
@@ -26,6 +27,9 @@ class GrindingStrategy : public IBotStrategy
 {
 public:
     GrindingStrategy();
+
+    // Set combat manager (called by RandomBotAI after construction)
+    void SetCombatMgr(BotCombatMgr* pCombatMgr) { m_pCombatMgr = pCombatMgr; }
 
     // IBotStrategy interface
     bool Update(Player* pBot, uint32 diff) override;
@@ -44,6 +48,9 @@ private:
     // Target finding
     Creature* FindGrindTarget(Player* pBot, float range = 50.0f);
     bool IsValidGrindTarget(Player* pBot, Creature* pCreature) const;
+
+    // Combat manager (set by RandomBotAI, avoids dynamic_cast in hot path)
+    BotCombatMgr* m_pCombatMgr = nullptr;
 
     // Consecutive "no mobs" counter for travel system
     uint32 m_noMobsCount = 0;

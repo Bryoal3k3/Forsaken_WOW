@@ -113,6 +113,10 @@ void RandomBotAI::UpdateAI(uint32 const diff)
         // Initialize combat manager with spell data
         m_combatMgr->Initialize(me, this);
 
+        // Wire up combat manager to grinding strategy (avoids dynamic_cast in hot path)
+        if (GrindingStrategy* pGrinding = static_cast<GrindingStrategy*>(m_strategy.get()))
+            pGrinding->SetCombatMgr(m_combatMgr.get());
+
         // Summon pet for hunters/warlocks
         SummonPetIfNeeded();
 

@@ -7,7 +7,6 @@
  */
 
 #include "GrindingStrategy.h"
-#include "RandomBotAI.h"
 #include "Combat/BotCombatMgr.h"
 #include "Player.h"
 #include "Creature.h"
@@ -65,14 +64,8 @@ GrindingResult GrindingStrategy::UpdateGrinding(Player* pBot, uint32 /*diff*/)
         m_noMobsCount = 0;  // Reset on finding a target
 
         // Use combat manager for class-appropriate engagement
-        if (RandomBotAI* pAI = dynamic_cast<RandomBotAI*>(pBot->AI()))
-        {
-            if (pAI->GetCombatMgr())
-            {
-                if (pAI->GetCombatMgr()->Engage(pBot, pTarget))
-                    return GrindingResult::ENGAGED;
-            }
-        }
+        if (m_pCombatMgr && m_pCombatMgr->Engage(pBot, pTarget))
+            return GrindingResult::ENGAGED;
 
         // Fallback if combat manager not available
         if (pBot->Attack(pTarget, true))

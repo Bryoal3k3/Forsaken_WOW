@@ -44,10 +44,12 @@ public:
     uint32 GetNoMobsCount() const { return m_noMobsCount; }
     void ResetNoMobsCount() { m_noMobsCount = 0; }
 
+    // Target validation (public for use by NearestGrindTarget checker)
+    bool IsValidGrindTarget(Player* pBot, Creature* pCreature) const;
+
 private:
     // Target finding
     Creature* FindGrindTarget(Player* pBot, float range = 50.0f);
-    bool IsValidGrindTarget(Player* pBot, Creature* pCreature) const;
 
     // Combat manager (set by RandomBotAI, avoids dynamic_cast in hot path)
     BotCombatMgr* m_pCombatMgr = nullptr;
@@ -55,9 +57,15 @@ private:
     // Consecutive "no mobs" counter for travel system
     uint32 m_noMobsCount = 0;
 
+    // Adaptive search - backoff when no mobs found
+    uint32 m_skipTicks = 0;      // Ticks to skip before next search
+    uint32 m_backoffLevel = 0;   // Current backoff level (0-3)
+
     // Configuration
-    static constexpr float SEARCH_RANGE = 150.0f;  // Search radius for finding mobs
-    static constexpr int32 LEVEL_RANGE = 2;  // Bot level +/- this value
+    static constexpr float SEARCH_RANGE_CLOSE = 50.0f;   // First tier - quick local search
+    static constexpr float SEARCH_RANGE_FAR = 150.0f;    // Second tier - full range
+    static constexpr int32 LEVEL_RANGE = 2;              // Bot level +/- this value
+    static constexpr uint32 BACKOFF_MAX_LEVEL = 3;       // Max backoff: 8 ticks (8 seconds)
 };
 
 #endif // MANGOS_GRINDINGSTRATEGY_H

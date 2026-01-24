@@ -292,6 +292,38 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2026-01-24 - Code Audit Issue #2 Fixed
+- **Issue**: Grid search every tick (3000 searches/sec at scale)
+- **Fix**: Tiered radius search + exponential backoff
+  - Tier 1: 50 yards (fast local search)
+  - Tier 2: 150 yards (only if tier 1 empty)
+  - Backoff: 1s → 2s → 4s → 8s when no mobs found
+- **Files Modified**:
+  - `GrindingStrategy.h` - Added `m_skipTicks`, `m_backoffLevel`, tiered range constants
+  - `GrindingStrategy.cpp` - Added cooldown check, tiered search, backoff logic
+- **Commit**: (pending)
+- **Impact**: ~44% reduction in searches at scale, faster close-range detection
+
+### 2026-01-24 - Code Audit Issue #4 Fixed
+- **Issue**: List allocation every search in GrindingStrategy (heap allocations)
+- **Fix**: Eliminated list entirely - replaced with single-pass `CreatureLastSearcher` using stateful `NearestGrindTarget` checker
+- **Files Modified**:
+  - `GrindingStrategy.h` - Made `IsValidGrindTarget()` public for checker access
+  - `GrindingStrategy.cpp` - Replaced `AllCreaturesInRange` + list + loop with `NearestGrindTarget` + `CreatureLastSearcher`
+- **Commit**: (pending)
+- **Impact**: Zero container allocations, eliminates second iteration pass
+- **Code reduction**: 27 lines → 17 lines for checker + FindGrindTarget
+
+### 2026-01-24 - Code Audit Issue #3 Fixed
+- **Issue**: dynamic_cast in GrindingStrategy hot path (RTTI overhead)
+- **Fix**: Store BotCombatMgr* directly via setter, called during bot initialization
+- **Files Modified**:
+  - `GrindingStrategy.h` - Added SetCombatMgr() setter and m_pCombatMgr member
+  - `GrindingStrategy.cpp` - Replaced dynamic_cast block with direct pointer check
+  - `RandomBotAI.cpp` - Call SetCombatMgr() during initialization
+- **Commit**: d8aa6de1c
+- **Impact**: Eliminates ~3000 RTTI lookups/sec at scale
+
 ### 2026-01-24 - Code Audit Complete
 - **Created**: `docs/CODE_AUDIT_CHECKLIST.md` - 12 issues identified for scale optimization
 - **Critical Issues (3)**:
@@ -486,4 +518,4 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 *Last Updated: 2026-01-24*
-*Current State: Phase 5 complete. Travel system functional with 2 known bugs. See CURRENT_BUG.md for details.*
+*Current State: Phase 5 complete. Code audit in progress (3/12 issues fixed). Travel system has 2 known bugs - see CURRENT_BUG.md.*

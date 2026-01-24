@@ -15,21 +15,32 @@
 #include "GridNotifiersImpl.h"
 #include "CellImpl.h"
 
-// Custom checker to find ALL creatures in range (ignores faction)
-class AllCreaturesInRange
+// Checker that finds the nearest valid grind target in a single pass.
+// Used with CreatureLastSearcher - accepts creature only if it's closer than current best.
+class NearestGrindTarget
 {
 public:
-    AllCreaturesInRange(WorldObject const* pObject, float fMaxRange)
-        : m_pObject(pObject), m_fRange(fMaxRange) {}
+    NearestGrindTarget(Player* pBot, GrindingStrategy const* pStrategy, float maxRange)
+        : m_pBot(pBot), m_pStrategy(pStrategy), m_bestDist(maxRange + 1.0f) {}
 
-    bool operator() (Creature* pCreature)
+    bool operator()(Creature* pCreature)
     {
-        return pCreature->IsAlive() && m_pObject->IsWithinDist(pCreature, m_fRange, false);
+        if (!m_pStrategy->IsValidGrindTarget(m_pBot, pCreature))
+            return false;
+
+        float dist = m_pBot->GetDistance(pCreature);
+        if (dist < m_bestDist)
+        {
+            m_bestDist = dist;
+            return true;  // Accept - this is the new closest
+        }
+        return false;
     }
 
 private:
-    WorldObject const* m_pObject;
-    float m_fRange;
+    Player* m_pBot;
+    GrindingStrategy const* m_pStrategy;
+    float m_bestDist;
 };
 
 // ============================================================================
@@ -54,14 +65,29 @@ GrindingResult GrindingStrategy::UpdateGrinding(Player* pBot, uint32 /*diff*/)
     if (pBot->GetVictim())
     {
         m_noMobsCount = 0;  // Reset on successful engagement
+        m_backoffLevel = 0; // Reset backoff
+        m_skipTicks = 0;
         return GrindingResult::ENGAGED;
     }
 
-    // Find a mob to attack
-    Creature* pTarget = FindGrindTarget(pBot, SEARCH_RANGE);
+    // Adaptive search: skip ticks based on backoff level
+    if (m_skipTicks > 0)
+    {
+        m_skipTicks--;
+        return GrindingResult::BUSY;  // Cooling down, don't search yet
+    }
+
+    // Tiered search: try close range first (faster), then full range
+    Creature* pTarget = FindGrindTarget(pBot, SEARCH_RANGE_CLOSE);
+    if (!pTarget)
+        pTarget = FindGrindTarget(pBot, SEARCH_RANGE_FAR);
+
     if (pTarget)
     {
-        m_noMobsCount = 0;  // Reset on finding a target
+        // Reset backoff on finding a target
+        m_noMobsCount = 0;
+        m_backoffLevel = 0;
+        m_skipTicks = 0;
 
         // Use combat manager for class-appropriate engagement
         if (m_pCombatMgr && m_pCombatMgr->Engage(pBot, pTarget))
@@ -75,8 +101,13 @@ GrindingResult GrindingStrategy::UpdateGrinding(Player* pBot, uint32 /*diff*/)
         }
     }
 
-    // No mobs found - increment counter
+    // No mobs found - apply exponential backoff
     m_noMobsCount++;
+    if (m_backoffLevel < BACKOFF_MAX_LEVEL)
+        m_backoffLevel++;
+    // Skip 2^level - 1 ticks: level 1=1, level 2=3, level 3=7
+    m_skipTicks = (1u << m_backoffLevel) - 1;
+
     return GrindingResult::NO_TARGETS;
 }
 
@@ -92,7 +123,9 @@ void GrindingStrategy::OnEnterCombat(Player* /*pBot*/)
 
 void GrindingStrategy::OnLeaveCombat(Player* /*pBot*/)
 {
-    // Future: trigger looting behavior here
+    // Reset backoff after combat - mobs may have respawned
+    m_backoffLevel = 0;
+    m_skipTicks = 0;
 }
 
 // ============================================================================
@@ -147,29 +180,10 @@ bool GrindingStrategy::IsValidGrindTarget(Player* pBot, Creature* pCreature) con
 
 Creature* GrindingStrategy::FindGrindTarget(Player* pBot, float range)
 {
-    // Use direct grid search to find ALL creatures in range (including neutral)
-    std::list<Creature*> creatures;
-
-    AllCreaturesInRange check(pBot, range);
-    MaNGOS::CreatureListSearcher<AllCreaturesInRange> searcher(creatures, check);
-    Cell::VisitGridObjects(pBot, searcher, range);
-
+    // Single-pass search: finds nearest valid target directly, no list allocation
     Creature* pBestTarget = nullptr;
-    float bestDistance = range + 1.0f;
-
-    for (Creature* pCreature : creatures)
-    {
-        if (!IsValidGrindTarget(pBot, pCreature))
-            continue;
-
-        // Pick the closest valid target
-        float dist = pBot->GetDistance(pCreature);
-        if (dist < bestDistance)
-        {
-            bestDistance = dist;
-            pBestTarget = pCreature;
-        }
-    }
-
+    NearestGrindTarget check(pBot, this, range);
+    MaNGOS::CreatureLastSearcher<NearestGrindTarget> searcher(pBestTarget, check);
+    Cell::VisitGridObjects(pBot, searcher, range);
     return pBestTarget;
 }

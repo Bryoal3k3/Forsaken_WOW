@@ -100,8 +100,15 @@ if (grindResult == NO_TARGETS && noMobsCount >= 5)
 
 | Constant | Value | Purpose |
 |----------|-------|---------|
-| `SEARCH_RANGE` | 150 yards | Radius to search for mobs |
+| `SEARCH_RANGE_CLOSE` | 50 yards | First tier - quick local search |
+| `SEARCH_RANGE_FAR` | 150 yards | Second tier - full range if close is empty |
 | `LEVEL_RANGE` | ±2 levels | Valid mob level range |
+| `BACKOFF_MAX_LEVEL` | 3 | Max backoff level (8 second interval) |
+
+**Adaptive Search Behavior:**
+- Searches close range (50yd) first, then far range (150yd) if needed
+- When no mobs found, applies exponential backoff: 1s → 2s → 4s → 8s
+- Resets to fast searching when target found or combat ends
 
 ### Looting (LootingBehavior.h)
 
@@ -237,10 +244,11 @@ Bot initialization and state changes are logged:
 
 | Symptom | Likely Cause |
 |---------|--------------|
-| Bot stands idle | No mobs in SEARCH_RANGE, travel not triggering |
+| Bot stands idle | No mobs in range, backoff active (waits up to 8s), or travel not triggering |
 | Bot keeps sitting | Resting threshold not met (check HP/mana %) |
 | Bot won't vendor | Bags not 100% full, gear not broken |
 | Bot stuck traveling | Navmesh issue, stuck timeout will reset |
+| Bot slow to find mobs | Backoff active from previous empty search (resets when mob found) |
 
 ---
 

@@ -45,36 +45,51 @@ GrindingStrategy::GrindingStrategy()
 // IBotStrategy Interface
 // ============================================================================
 
-bool GrindingStrategy::Update(Player* pBot, uint32 /*diff*/)
+GrindingResult GrindingStrategy::UpdateGrinding(Player* pBot, uint32 /*diff*/)
 {
     if (!pBot || !pBot->IsAlive() || pBot->IsInCombat())
-        return false;
+        return GrindingResult::BUSY;
 
     // Already have a victim? We're engaged, just waiting for combat to start
     // (e.g., caster has Attack() called but first spell hasn't landed yet)
     if (pBot->GetVictim())
-        return true;  // Busy - don't try to find another target
+    {
+        m_noMobsCount = 0;  // Reset on successful engagement
+        return GrindingResult::ENGAGED;
+    }
 
     // Find a mob to attack
     Creature* pTarget = FindGrindTarget(pBot, SEARCH_RANGE);
     if (pTarget)
     {
+        m_noMobsCount = 0;  // Reset on finding a target
+
         // Use combat manager for class-appropriate engagement
         if (RandomBotAI* pAI = dynamic_cast<RandomBotAI*>(pBot->AI()))
         {
             if (pAI->GetCombatMgr())
-                return pAI->GetCombatMgr()->Engage(pBot, pTarget);
+            {
+                if (pAI->GetCombatMgr()->Engage(pBot, pTarget))
+                    return GrindingResult::ENGAGED;
+            }
         }
 
         // Fallback if combat manager not available
         if (pBot->Attack(pTarget, true))
         {
             pBot->GetMotionMaster()->MoveChase(pTarget);
-            return true;
+            return GrindingResult::ENGAGED;
         }
     }
 
-    return false;
+    // No mobs found - increment counter
+    m_noMobsCount++;
+    return GrindingResult::NO_TARGETS;
+}
+
+bool GrindingStrategy::Update(Player* pBot, uint32 diff)
+{
+    return UpdateGrinding(pBot, diff) == GrindingResult::ENGAGED;
 }
 
 void GrindingStrategy::OnEnterCombat(Player* /*pBot*/)

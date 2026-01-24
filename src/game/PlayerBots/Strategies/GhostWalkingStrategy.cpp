@@ -7,6 +7,8 @@
  */
 
 #include "GhostWalkingStrategy.h"
+#include "TravelingStrategy.h"
+#include "RandomBotAI.h"
 #include "Player.h"
 #include "Corpse.h"
 #include "UnitDefines.h"
@@ -48,6 +50,23 @@ void GhostWalkingStrategy::OnDeath(Player* pBot)
         pBot->SpawnCorpseBones();
         m_recentDeaths.clear();  // Reset death counter after spirit healer res
         m_initialized = false;
+
+        // Check for resurrection sickness (spell ID 15007)
+        if (pBot->HasAura(15007))
+        {
+            sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+                "[GhostWalkingStrategy] %s has resurrection sickness, will wait before grinding",
+                pBot->GetName());
+            // Don't signal travel - let bot rest/wait
+            // The res sickness will expire and normal grinding will resume
+        }
+
+        // Reset travel state so it can evaluate fresh after resurrection
+        if (RandomBotAI* pAI = dynamic_cast<RandomBotAI*>(pBot->AI()))
+        {
+            if (TravelingStrategy* pTravel = pAI->GetTravelingStrategy())
+                pTravel->ResetArrivalCooldown();
+        }
         return;
     }
 
@@ -110,6 +129,13 @@ bool GhostWalkingStrategy::Update(Player* pBot, uint32 /*diff*/)
         pBot->ResurrectPlayer(0.5f);
         pBot->SpawnCorpseBones();
         m_initialized = false;
+
+        // Reset travel state so bot can evaluate if current location has mobs
+        if (RandomBotAI* pAI = dynamic_cast<RandomBotAI*>(pBot->AI()))
+        {
+            if (TravelingStrategy* pTravel = pAI->GetTravelingStrategy())
+                pTravel->ResetArrivalCooldown();
+        }
         return false;
     }
 

@@ -12,12 +12,14 @@
 
 #include "CombatBotBaseAI.h"
 #include "Strategies/LootingBehavior.h"
+#include "Strategies/GrindingStrategy.h"
 #include "BotCheats.h"
 #include <memory>
 
 class IBotStrategy;
 class GhostWalkingStrategy;
 class VendoringStrategy;
+class TravelingStrategy;
 class BotCombatMgr;
 
 class RandomBotAI : public CombatBotBaseAI
@@ -40,6 +42,12 @@ public:
 
     // Combat manager accessor (for GrindingStrategy)
     BotCombatMgr* GetCombatMgr() { return m_combatMgr.get(); }
+
+    // Traveling strategy accessor (for GhostWalkingStrategy)
+    TravelingStrategy* GetTravelingStrategy() { return m_travelingStrategy.get(); }
+
+    // Grinding strategy accessor (for travel system integration)
+    GrindingStrategy* GetGrindingStrategy() { return static_cast<GrindingStrategy*>(m_strategy.get()); }
 
     // Class-specific combat routines
     void UpdateInCombatAI_Paladin() override;
@@ -81,6 +89,9 @@ private:
 
     // Vendoring strategy
     std::unique_ptr<VendoringStrategy> m_vendoringStrategy;
+
+    // Traveling strategy (finding and moving to grind spots)
+    std::unique_ptr<TravelingStrategy> m_travelingStrategy;
 
     // Combat manager (handles class-specific engagement and rotations)
     std::unique_ptr<BotCombatMgr> m_combatMgr;

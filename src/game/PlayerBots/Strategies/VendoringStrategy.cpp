@@ -241,6 +241,65 @@ bool VendoringStrategy::IsGearBroken(Player* pBot)
     return false;
 }
 
+float VendoringStrategy::GetBagFullPercent(Player* pBot)
+{
+    if (!pBot)
+        return 0.0f;
+
+    uint32 totalSlots = 16;  // Backpack has 16 slots
+    uint32 usedSlots = 0;
+
+    // Count backpack items
+    for (int i = INVENTORY_SLOT_ITEM_START; i < INVENTORY_SLOT_ITEM_END; ++i)
+    {
+        if (pBot->GetItemByPos(INVENTORY_SLOT_BAG_0, i))
+            usedSlots++;
+    }
+
+    // Count items in equipped bags
+    for (int bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
+    {
+        if (Bag* pBag = dynamic_cast<Bag*>(pBot->GetItemByPos(INVENTORY_SLOT_BAG_0, bag)))
+        {
+            uint32 bagSize = pBag->GetBagSize();
+            totalSlots += bagSize;
+            for (uint32 slot = 0; slot < bagSize; ++slot)
+            {
+                if (pBag->GetItemByPos(slot))
+                    usedSlots++;
+            }
+        }
+    }
+
+    return totalSlots > 0 ? static_cast<float>(usedSlots) / static_cast<float>(totalSlots) : 0.0f;
+}
+
+float VendoringStrategy::GetLowestDurabilityPercent(Player* pBot)
+{
+    if (!pBot)
+        return 1.0f;
+
+    float lowestPercent = 1.0f;
+
+    for (int i = EQUIPMENT_SLOT_START; i < EQUIPMENT_SLOT_END; ++i)
+    {
+        Item* pItem = pBot->GetItemByPos(INVENTORY_SLOT_BAG_0, i);
+        if (pItem)
+        {
+            uint32 maxDura = pItem->GetUInt32Value(ITEM_FIELD_MAXDURABILITY);
+            if (maxDura > 0)
+            {
+                uint32 curDura = pItem->GetUInt32Value(ITEM_FIELD_DURABILITY);
+                float percent = static_cast<float>(curDura) / static_cast<float>(maxDura);
+                if (percent < lowestPercent)
+                    lowestPercent = percent;
+            }
+        }
+    }
+
+    return lowestPercent;
+}
+
 Creature* VendoringStrategy::GetVendorCreature(Player* pBot) const
 {
     if (!pBot)

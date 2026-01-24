@@ -12,6 +12,7 @@
 #include "Strategies/GrindingStrategy.h"
 #include "Strategies/GhostWalkingStrategy.h"
 #include "Strategies/VendoringStrategy.h"
+#include "Strategies/TravelingStrategy.h"
 #include "Player.h"
 #include "Creature.h"
 #include "Corpse.h"
@@ -36,6 +37,7 @@ RandomBotAI::RandomBotAI()
     , m_strategy(std::make_unique<GrindingStrategy>())
     , m_ghostStrategy(std::make_unique<GhostWalkingStrategy>())
     , m_vendoringStrategy(std::make_unique<VendoringStrategy>())
+    , m_travelingStrategy(std::make_unique<TravelingStrategy>())
     , m_combatMgr(std::make_unique<BotCombatMgr>())
 {
     m_updateTimer.Reset(1000);
@@ -226,9 +228,35 @@ void RandomBotAI::UpdateOutOfCombatAI()
     if (m_vendoringStrategy && m_vendoringStrategy->Update(me, RB_UPDATE_INTERVAL))
         return;  // Busy vendoring
 
-    // Delegate to strategy for high-level behavior (finding targets, etc.)
-    if (m_strategy && m_strategy->Update(me, 0))
-        return;
+    // Get grinding strategy for explicit result handling
+    GrindingStrategy* pGrinding = static_cast<GrindingStrategy*>(m_strategy.get());
+    if (pGrinding)
+    {
+        GrindingResult grindResult = pGrinding->UpdateGrinding(me, 0);
+
+        if (grindResult == GrindingResult::ENGAGED)
+        {
+            // Found and attacking a target - reset travel state
+            if (m_travelingStrategy)
+                m_travelingStrategy->ResetArrivalCooldown();
+            return;
+        }
+
+        // Check if we should travel (grinding found no targets)
+        if (grindResult == GrindingResult::NO_TARGETS)
+        {
+            // Check if we've had enough consecutive failures
+            if (pGrinding->GetNoMobsCount() >= TravelConstants::NO_MOBS_THRESHOLD)
+            {
+                if (m_travelingStrategy)
+                {
+                    m_travelingStrategy->SignalNoMobs();
+                    if (m_travelingStrategy->Update(me, RB_UPDATE_INTERVAL))
+                        return;  // Busy traveling
+                }
+            }
+        }
+    }
 
     // Delegate out of combat (buffs, etc.) to combat manager
     m_combatMgr->UpdateOutOfCombat(me);

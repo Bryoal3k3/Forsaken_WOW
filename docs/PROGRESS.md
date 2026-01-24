@@ -1,6 +1,6 @@
 # RandomBot AI Development Progress
 
-## Project Status: Phase 4 COMPLETE + Combat System Refactor
+## Project Status: Phase 5 COMPLETE (Travel System)
 
 | Phase | Status | Description |
 |-------|--------|-------------|
@@ -10,7 +10,19 @@
 | Phase 3 | ✅ Complete | Death handling and respawn |
 | Phase 4 | ✅ Complete | Vendoring - sell items, repair gear |
 | Phase 4.5 | ✅ Complete | Combat system refactor - class-appropriate engagement |
-| Phase 5 | 📋 Planned | Movement - exploration, travel |
+| Phase 5 | ✅ Complete | Travel system - find and travel to grind spots |
+
+### Phase 5 Features Implemented
+- **Out-leveled area detection**: Bot recognizes when no mobs within +/-2 levels exist (5 consecutive ticks)
+- **Zone transition**: Bot queries DB for level/faction-appropriate grind spots, travels there
+- **Stuck detection**: 30-second timeout resets travel if bot gets stuck on terrain
+- **Combat interrupt**: Bot fights if attacked while traveling, then resumes
+- **Anti-thrashing**: 90-second arrival cooldown prevents constant spot-hopping
+- **Post-resurrection reset**: Travel state resets after death/resurrection
+
+### Phase 5 Known Bugs (see CURRENT_BUG.md)
+1. **Movement sync bug**: Bots move at super speed / disappear during long-distance travel
+2. **Pre-travel vendor check not wired up**: Bot stands idle if bags >60% or durability <50%
 
 ---
 
@@ -172,9 +184,15 @@ if (IsBot())
 13. Vendor when bags full or gear broken - walk to nearest vendor
 14. Sell all items and repair gear at vendor
 15. Persist correctly across server restarts (account IDs preserved)
+16. **Travel to new grind spots** when current area has no mobs (Phase 5)
+17. Handle getting stuck while traveling (30-sec timeout reset)
+18. Resume travel after combat interruption
 
-**What bots CANNOT do yet:**
-- Travel/explore to find new grinding areas (stuck at vendor location after vendoring)
+**Known Limitations:**
+- Long-distance travel has movement sync issues (super speed / disappearing)
+- Pre-travel vendor check not fully wired up (see CURRENT_BUG.md)
+- Same-map travel only (no boats/zeppelins/flight paths)
+- May path through dangerous areas (no threat avoidance)
 
 ---
 
@@ -218,7 +236,8 @@ src/game/PlayerBots/
     ├── GrindingStrategy.h/cpp  ← Find mob → kill
     ├── LootingBehavior.h/cpp   ← Loot corpses after combat
     ├── GhostWalkingStrategy.h/cpp ← Death handling
-    └── VendoringStrategy.h/cpp ← Sell items, repair gear
+    ├── VendoringStrategy.h/cpp ← Sell items, repair gear
+    └── TravelingStrategy.h/cpp ← Find and travel to grind spots
 ```
 
 ### Layer Responsibilities
@@ -272,6 +291,40 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 ## Session Log
+
+### 2026-01-24 - Phase 5 COMPLETE (Travel System)
+- **Feature**: Bots now travel to level-appropriate grind spots when current area has no mobs
+- **Database**: Created `characters.grind_spots` table with starting zone data
+- **New Files**:
+  - `sql/custom/grind_spots.sql` - Table schema + test data
+  - `Strategies/TravelingStrategy.h/cpp` - State machine for travel
+- **Modified Files**:
+  - `GrindingStrategy.h/cpp` - Added `GrindingResult` enum for explicit signaling
+  - `VendoringStrategy.h/cpp` - Added percentage-based threshold methods
+  - `RandomBotAI.h/cpp` - Integrated TravelingStrategy
+  - `GhostWalkingStrategy.cpp` - Reset travel state on resurrection
+- **Working Features**:
+  - Travel detection (5 consecutive "no mobs" ticks)
+  - DB query for level/faction-appropriate spots
+  - Stuck detection (30-sec timeout)
+  - Combat interrupt (fight → resume travel)
+  - Anti-thrashing (90-sec arrival cooldown)
+- **Known Bugs** (documented in CURRENT_BUG.md):
+  1. Movement sync bug - super speed / disappearing during long travel
+  2. Pre-travel vendor check not wired up - bot stands idle with >60% bags
+
+### 2026-01-24 - Tree Collision FIXED
+- **Problem**: Bots walked through trees that players cannot walk through
+- **Investigation** (2026-01-23):
+  1. Confirmed navmesh paths went through trees (`.mmap path` showed straight line)
+  2. Found trees had `nBoundingTriangles = 0` in M2 files - no collision mesh
+  3. Tested `ignoreM2Model = false` in Map.h - didn't help (LoS ≠ pathfinding)
+  4. Checked M2 `collision_box` and `collision_sphere_radius` fields - all zeros
+  5. Ran full vmap extraction with debug output - no hidden collision data found
+- **Root Cause**: **Elysium client had corrupted/modified M2 data** - trees were missing collision info that exists in vanilla 1.12
+- **Fix**: Re-extracted vmaps and mmaps from a **clean vanilla 1.12 WoW client**
+- **Result**: Bots now properly pathfind around trees!
+- **Lesson Learned**: Always extract from clean, unmodified client files. Private server clients may have corrupted data.
 
 ### 2025-01-22 - Enable Navmesh Pathfinding for Bot Movement
 - **Problem**: Bots were walking through terrain (falling through hills/mounds) when using MovePoint for vendoring, ghost walking, and looting.
@@ -407,5 +460,5 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ---
 
-*Last Updated: 2025-01-22*
-*Current State: Phase 4.5 complete. Navmesh pathfinding enabled for bot movement. Next: Phase 5 (movement/exploration).*
+*Last Updated: 2026-01-24*
+*Current State: Phase 5 complete. Travel system functional with 2 known bugs. See CURRENT_BUG.md for details.*

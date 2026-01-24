@@ -202,6 +202,7 @@ set (game_SRCS
     PlayerBots/Strategies/GrindingStrategy.cpp
     PlayerBots/Strategies/GhostWalkingStrategy.cpp
     PlayerBots/Strategies/VendoringStrategy.cpp
+    PlayerBots/Strategies/TravelingStrategy.cpp
     PlayerBots/Strategies/LootingBehavior.cpp
     PlayerBots/Combat/BotCombatMgr.cpp
     PlayerBots/Combat/Classes/WarriorCombat.cpp
@@ -445,6 +446,7 @@ set (game_SRCS
     PlayerBots/Strategies/GrindingStrategy.h
     PlayerBots/Strategies/GhostWalkingStrategy.h
     PlayerBots/Strategies/VendoringStrategy.h
+    PlayerBots/Strategies/TravelingStrategy.h
     PlayerBots/Strategies/LootingBehavior.h
     PlayerBots/Combat/IClassCombat.h
     PlayerBots/Combat/BotCombatMgr.h

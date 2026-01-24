@@ -44,6 +44,9 @@ public:
     bool IsComplete(Player* pBot) const;
     void Reset();
 
+    // Force start vendoring (called by TravelingStrategy for pre-travel vendor)
+    void ForceStart() { m_state = VendorState::FINDING_VENDOR; }
+
     // Check if bot needs to vendor (bags full OR gear broken)
     static bool NeedsToVendor(Player* pBot);
 
@@ -55,6 +58,10 @@ public:
 
     // Get total free bag slots
     static uint32 GetFreeBagSlots(Player* pBot);
+
+    // Percentage-based checks for pre-travel decisions
+    static float GetBagFullPercent(Player* pBot);
+    static float GetLowestDurabilityPercent(Player* pBot);
 
     // Pre-build vendor cache (call during server startup)
     static void BuildVendorCache();

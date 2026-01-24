@@ -14,6 +14,14 @@
 class Creature;
 class Player;
 
+// Result of grinding update - explicit signaling for travel decisions
+enum class GrindingResult
+{
+    ENGAGED,        // Found target, attacking
+    NO_TARGETS,     // Searched area, no valid mobs found
+    BUSY            // Doing something else (in combat, looting, etc.)
+};
+
 class GrindingStrategy : public IBotStrategy
 {
 public:
@@ -25,10 +33,20 @@ public:
     void OnLeaveCombat(Player* pBot) override;
     char const* GetName() const override { return "Grinding"; }
 
+    // Extended interface with explicit result
+    GrindingResult UpdateGrinding(Player* pBot, uint32 diff);
+
+    // Track consecutive "no mobs" failures for travel decisions
+    uint32 GetNoMobsCount() const { return m_noMobsCount; }
+    void ResetNoMobsCount() { m_noMobsCount = 0; }
+
 private:
     // Target finding
     Creature* FindGrindTarget(Player* pBot, float range = 50.0f);
     bool IsValidGrindTarget(Player* pBot, Creature* pCreature) const;
+
+    // Consecutive "no mobs" counter for travel system
+    uint32 m_noMobsCount = 0;
 
     // Configuration
     static constexpr float SEARCH_RANGE = 150.0f;  // Search radius for finding mobs

@@ -29,7 +29,8 @@
 
 1. **Before work:** Read `docs/PROGRESS.md` for current state and next steps
 2. **Reference:** See `docs/VMANGOS_BOT_FRAMEWORK_ANALYSIS.md` for framework details
-3. **After work:** Update `docs/PROGRESS.md` with what changed
+3. **Reference:** See `docs/BOT_DECISION_FLOW.md` for state machine and strategy coordination
+4. **After work:** Update `docs/PROGRESS.md` with what changed
 
 ### Checkpoint System (MANDATORY)
 After EACH work session, update `docs/PROGRESS.md` with:
@@ -76,7 +77,8 @@ src/game/PlayerBots/
     ├── GrindingStrategy.h/cpp  ← Find mob → kill
     ├── LootingBehavior.h/cpp   ← Loot corpses after combat
     ├── GhostWalkingStrategy.h/cpp ← Death handling
-    └── VendoringStrategy.h/cpp ← Sell items, repair gear
+    ├── VendoringStrategy.h/cpp ← Sell items, repair gear
+    └── TravelingStrategy.h/cpp ← Travel to new grind spots
 ```
 
 ### Layer Responsibilities
@@ -118,6 +120,7 @@ src/game/PlayerBots/
 realmd.account          ← Bot accounts (RNDBOT001, RNDBOT002...)
 characters.characters   ← Bot character data (name, class, level, position)
 characters.playerbot    ← Links char_guid to AI type string
+characters.grind_spots  ← Level/faction-appropriate grind locations for travel
 ```
 
 ### Bot Generation Flow (First Launch)
@@ -195,10 +198,11 @@ mysql -u mangos -pmangos realmd      # Accounts DB (RNDBOT accounts)
 | Setting | Purpose |
 |---------|---------|
 | `RandomBot.Enable` | Enable/disable system |
+| `RandomBot.Purge` | Purge all bots on startup (set back to 0 after!) |
 | `RandomBot.MaxBots` | Number of bots to generate |
 | `RandomBot.MinBots` | Minimum bots online |
 | `RandomBot.Refresh` | Add/remove interval (ms) |
 
 ---
 
-*Last Updated: 2025-01-11*
+*Last Updated: 2026-01-24*

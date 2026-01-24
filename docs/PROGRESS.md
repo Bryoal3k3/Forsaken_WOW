@@ -292,6 +292,20 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2026-01-24 - Documentation Update
+- **Created**: `docs/BOT_DECISION_FLOW.md` - comprehensive state machine documentation
+  - Update loop flowchart
+  - Strategy priority order
+  - All constants and thresholds
+  - State transition diagrams
+  - Debugging tips
+- **Updated**: `CLAUDE.md`
+  - Added TravelingStrategy to architecture
+  - Added grind_spots table to database tables
+  - Added RandomBot.Purge to configuration
+  - Added reference to BOT_DECISION_FLOW.md in documentation protocol
+  - Updated last modified date
+
 ### 2026-01-24 - Phase 5 COMPLETE (Travel System)
 - **Feature**: Bots now travel to level-appropriate grind spots when current area has no mobs
 - **Database**: Created `characters.grind_spots` table with starting zone data

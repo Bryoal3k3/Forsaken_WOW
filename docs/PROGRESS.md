@@ -292,6 +292,17 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2026-01-24 - Code Audit Complete
+- **Created**: `docs/CODE_AUDIT_CHECKLIST.md` - 12 issues identified for scale optimization
+- **Critical Issues (3)**:
+  1. DB query in TravelingStrategy hot path
+  2. Grid search every tick in GrindingStrategy
+  3. dynamic_cast in hot path
+- **High Priority (2)**: List allocations, debug PathFinder in production
+- **Medium Priority (2)**: Pre-travel vendor bug, thread safety
+- **Low Priority (5)**: Dead code, code duplication, minor memory leak
+- **Purpose**: Checklist for tackling issues across multiple sessions with dev reviews
+
 ### 2026-01-24 - Documentation Update
 - **Created**: `docs/BOT_DECISION_FLOW.md` - comprehensive state machine documentation
   - Update loop flowchart

@@ -8,10 +8,7 @@
 
 #include "RogueCombat.h"
 #include "CombatBotBaseAI.h"
-#include "Player.h"
-#include "Unit.h"
-#include "MotionMaster.h"
-#include "Log.h"
+#include "../CombatHelpers.h"
 
 RogueCombat::RogueCombat(CombatBotBaseAI* pAI)
     : m_pAI(pAI)
@@ -20,17 +17,7 @@ RogueCombat::RogueCombat(CombatBotBaseAI* pAI)
 
 bool RogueCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    // Rogues use melee - Attack + Chase
-    if (pBot->Attack(pTarget, true))
-    {
-        pBot->GetMotionMaster()->MoveChase(pTarget);
-        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[RogueCombat] %s engaging %s (Attack success)",
-            pBot->GetName(), pTarget->GetName());
-        return true;
-    }
-    sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[RogueCombat] %s failed to engage %s (Attack returned false)",
-        pBot->GetName(), pTarget->GetName());
-    return false;
+    return CombatHelpers::EngageMelee(pBot, pTarget, "RogueCombat");
 }
 
 void RogueCombat::UpdateCombat(Player* pBot, Unit* pVictim)

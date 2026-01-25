@@ -179,6 +179,9 @@ void RandomBotGenerator::PurgeAllRandomBots()
 
 void RandomBotGenerator::GenerateRandomBots(uint32 count)
 {
+    // Clear name tracking from any previous generation cycle
+    m_generatedNames.clear();
+
     // Calculate how many accounts we need (9 characters per account max in vanilla)
     uint32 accountsNeeded = (count + 8) / 9;
 
@@ -300,19 +303,6 @@ void RandomBotGenerator::CreatePlayerbotEntry(uint32 charGuid)
 uint32 RandomBotGenerator::GetNextFreeAccountId()
 {
     std::unique_ptr<QueryResult> result = LoginDatabase.PQuery("SELECT MAX(id) FROM account");
-    if (!result)
-        return 1;
-
-    Field* fields = result->Fetch();
-    if (fields[0].IsNULL())
-        return 1;
-
-    return fields[0].GetUInt32() + 1;
-}
-
-uint32 RandomBotGenerator::GetNextFreeCharacterGuid()
-{
-    std::unique_ptr<QueryResult> result = CharacterDatabase.PQuery("SELECT MAX(guid) FROM characters");
     if (!result)
         return 1;
 

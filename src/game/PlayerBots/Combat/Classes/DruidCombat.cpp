@@ -8,10 +8,7 @@
 
 #include "DruidCombat.h"
 #include "CombatBotBaseAI.h"
-#include "Player.h"
-#include "Unit.h"
-#include "MotionMaster.h"
-#include "Log.h"
+#include "../CombatHelpers.h"
 
 DruidCombat::DruidCombat(CombatBotBaseAI* pAI)
     : m_pAI(pAI)
@@ -20,17 +17,7 @@ DruidCombat::DruidCombat(CombatBotBaseAI* pAI)
 
 bool DruidCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    // Druids treated as melee/hybrid for now (Balance caster but engage like melee)
-    if (pBot->Attack(pTarget, true))
-    {
-        pBot->GetMotionMaster()->MoveChase(pTarget);
-        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[DruidCombat] %s engaging %s (Attack success)",
-            pBot->GetName(), pTarget->GetName());
-        return true;
-    }
-    sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[DruidCombat] %s failed to engage %s (Attack returned false)",
-        pBot->GetName(), pTarget->GetName());
-    return false;
+    return CombatHelpers::EngageMelee(pBot, pTarget, "DruidCombat");
 }
 
 void DruidCombat::UpdateCombat(Player* pBot, Unit* pVictim)

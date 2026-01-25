@@ -61,7 +61,6 @@ private:
 
     // Helper functions
     uint32 GetNextFreeAccountId();
-    uint32 GetNextFreeCharacterGuid();
     std::string GenerateUniqueBotName(uint8 race, uint8 gender);
     std::string GenerateRaceName(uint8 race, uint8 gender);
     bool ValidateGeneratedName(std::string const& name);

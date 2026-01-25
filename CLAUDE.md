@@ -66,6 +66,7 @@ src/game/PlayerBots/
 ├── Combat/                     ← Combat system (class-specific handlers)
 │   ├── IClassCombat.h          ← Interface for class handlers
 │   ├── BotCombatMgr.h/cpp      ← Combat coordinator
+│   ├── CombatHelpers.h         ← Shared helpers (EngageCaster, EngageMelee, HandleRangedMovement)
 │   └── Classes/                ← Per-class combat handlers (9 classes)
 │       ├── WarriorCombat.h/cpp
 │       ├── MageCombat.h/cpp

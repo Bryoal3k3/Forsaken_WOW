@@ -8,10 +8,7 @@
 
 #include "ShamanCombat.h"
 #include "CombatBotBaseAI.h"
-#include "Player.h"
-#include "Unit.h"
-#include "MotionMaster.h"
-#include "Log.h"
+#include "../CombatHelpers.h"
 
 ShamanCombat::ShamanCombat(CombatBotBaseAI* pAI)
     : m_pAI(pAI)
@@ -20,17 +17,7 @@ ShamanCombat::ShamanCombat(CombatBotBaseAI* pAI)
 
 bool ShamanCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    // Shamans treated as melee for now (Enhancement focus)
-    if (pBot->Attack(pTarget, true))
-    {
-        pBot->GetMotionMaster()->MoveChase(pTarget);
-        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[ShamanCombat] %s engaging %s (Attack success)",
-            pBot->GetName(), pTarget->GetName());
-        return true;
-    }
-    sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[ShamanCombat] %s failed to engage %s (Attack returned false)",
-        pBot->GetName(), pTarget->GetName());
-    return false;
+    return CombatHelpers::EngageMelee(pBot, pTarget, "ShamanCombat");
 }
 
 void ShamanCombat::UpdateCombat(Player* pBot, Unit* pVictim)

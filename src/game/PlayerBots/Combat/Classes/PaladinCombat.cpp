@@ -8,10 +8,7 @@
 
 #include "PaladinCombat.h"
 #include "CombatBotBaseAI.h"
-#include "Player.h"
-#include "Unit.h"
-#include "MotionMaster.h"
-#include "Log.h"
+#include "../CombatHelpers.h"
 
 PaladinCombat::PaladinCombat(CombatBotBaseAI* pAI)
     : m_pAI(pAI)
@@ -20,17 +17,7 @@ PaladinCombat::PaladinCombat(CombatBotBaseAI* pAI)
 
 bool PaladinCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    // Paladins use melee - Attack + Chase
-    if (pBot->Attack(pTarget, true))
-    {
-        pBot->GetMotionMaster()->MoveChase(pTarget);
-        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[PaladinCombat] %s engaging %s (Attack success)",
-            pBot->GetName(), pTarget->GetName());
-        return true;
-    }
-    sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[PaladinCombat] %s failed to engage %s (Attack returned false)",
-        pBot->GetName(), pTarget->GetName());
-    return false;
+    return CombatHelpers::EngageMelee(pBot, pTarget, "PaladinCombat");
 }
 
 void PaladinCombat::UpdateCombat(Player* pBot, Unit* pVictim)

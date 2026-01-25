@@ -12,6 +12,7 @@
 #include "Unit.h"
 #include "MotionMaster.h"
 #include "Log.h"
+#include "../CombatHelpers.h"
 
 HunterCombat::HunterCombat(CombatBotBaseAI* pAI)
     : m_pAI(pAI)
@@ -43,20 +44,7 @@ void HunterCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     if (!pVictim)
         return;
 
-    // Check if target is snared/rooted
-    bool targetIsSnared = pVictim->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED) ||
-                          pVictim->HasAuraType(SPELL_AURA_MOD_ROOT);
-
-    float dist = pBot->GetDistance(pVictim);
-    bool inCastRange = dist <= 30.0f;
-
-    // Only stop movement if we're in range AND target isn't snared
-    // This allows approach movement to continue until we can attack
-    if (inCastRange && !targetIsSnared && pBot->IsMoving())
-    {
-        pBot->StopMoving();
-        pBot->GetMotionMaster()->Clear();
-    }
+    CombatHelpers::HandleRangedMovement(pBot, pVictim);
 
     // Melee combat - when victim can hit us (deadzone)
     if (pVictim->CanReachWithMeleeAutoAttack(pBot))

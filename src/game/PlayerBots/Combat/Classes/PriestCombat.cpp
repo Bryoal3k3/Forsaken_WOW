@@ -8,10 +8,7 @@
 
 #include "PriestCombat.h"
 #include "CombatBotBaseAI.h"
-#include "Player.h"
-#include "Unit.h"
-#include "MotionMaster.h"
-#include "Log.h"
+#include "../CombatHelpers.h"
 
 PriestCombat::PriestCombat(CombatBotBaseAI* pAI)
     : m_pAI(pAI)
@@ -20,22 +17,7 @@ PriestCombat::PriestCombat(CombatBotBaseAI* pAI)
 
 bool PriestCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    // Use Attack(false) to establish combat state without melee swings
-    // This sets GetVictim() and adds us to mob's attacker list
-    // First spell in UpdateCombat() will deal damage and fully engage
-    if (pBot->Attack(pTarget, false))
-    {
-        // Move into casting range (28 yards gives buffer for 30-yard spells)
-        pBot->GetMotionMaster()->MoveChase(pTarget, 28.0f);
-
-        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[PriestCombat] %s engaging %s (Attack success, moving to range)",
-            pBot->GetName(), pTarget->GetName());
-        return true;
-    }
-
-    sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[PriestCombat] %s failed to engage %s (Attack returned false)",
-        pBot->GetName(), pTarget->GetName());
-    return false;
+    return CombatHelpers::EngageCaster(pBot, pTarget, "PriestCombat");
 }
 
 void PriestCombat::UpdateCombat(Player* pBot, Unit* pVictim)
@@ -43,20 +25,7 @@ void PriestCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     if (!pVictim)
         return;
 
-    // Only kite if target is snared/rooted, otherwise stand and fight
-    bool targetIsSnared = pVictim->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED) ||
-                          pVictim->HasAuraType(SPELL_AURA_MOD_ROOT);
-
-    float dist = pBot->GetDistance(pVictim);
-    bool inCastRange = dist <= 30.0f;
-
-    // Only stop movement if we're in casting range AND target isn't snared
-    // This allows approach movement to continue until we can cast
-    if (inCastRange && !targetIsSnared && pBot->IsMoving())
-    {
-        pBot->StopMoving();
-        pBot->GetMotionMaster()->Clear();
-    }
+    CombatHelpers::HandleRangedMovement(pBot, pVictim);
 
     // Shield self at low health
     if (pBot->GetHealthPercent() < 50.0f &&

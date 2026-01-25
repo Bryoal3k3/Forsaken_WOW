@@ -292,6 +292,30 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2026-01-24 - Code Audit Issue #8 Fixed
+- **Issue**: Dead code - `GetNextFreeCharacterGuid()` method never called
+- **Fix**: Removed method from RandomBotGenerator.cpp and declaration from .h
+- **Context**: Method was obsoleted when bot generation switched to `sObjectMgr.GeneratePlayerLowGuid()`
+- **Files Modified**: `RandomBotGenerator.cpp`, `RandomBotGenerator.h`
+- **Impact**: 13 lines of dead code removed
+
+### 2026-01-24 - CODE AUDIT #1 COMPLETE (12/12 issues)
+- **Full report:** See `docs/Audit_1.md` for detailed breakdown
+- **Issues Fixed:**
+  - #1: Cache grind spots at startup (zero runtime DB queries)
+  - #2: Tiered grid search + exponential backoff (~44% reduction)
+  - #3: Remove dynamic_cast from hot path (store pointer directly)
+  - #4: Eliminate list allocation in search (single-pass checker)
+  - #5: Remove debug PathFinder from production
+  - #6: Wire up pre-travel vendor trigger (fixes stuck bot bug)
+  - #7: Document cache thread safety ordering
+  - #8: Remove dead GetNextFreeCharacterGuid() method
+  - #9-11: Create CombatHelpers.h (consolidate ~150 lines duplicate code)
+  - #12: Clear m_generatedNames between generation cycles
+- **Files Created:** `Combat/CombatHelpers.h`
+- **Files Deleted:** `CODE_AUDIT_CHECKLIST.md`, `PHASE5_TRAVEL_PLAN.md`, `PHASE5_TRAVEL_SYSTEM_REPORT.md`
+- **Net Impact:** -47 lines of code, major performance improvements at scale
+
 ### 2026-01-24 - Code Audit Issue #7 Verified
 - **Issue**: Vendor/grind spot cache thread safety (potential race condition)
 - **Analysis**: Verified ordering in PlayerBotMgr::Load() is already correct
@@ -563,4 +587,4 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 *Last Updated: 2026-01-24*
-*Current State: Phase 5 complete. Code audit in progress (7/12 issues fixed, all Critical/High/Medium done). Travel system has 1 known bug remaining - see CURRENT_BUG.md.*
+*Current State: Phase 5 complete. Code Audit #1 complete (12/12 issues). Travel system has 1 known bug remaining - see CURRENT_BUG.md.*

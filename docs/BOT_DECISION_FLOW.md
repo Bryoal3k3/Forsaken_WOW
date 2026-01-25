@@ -274,4 +274,4 @@ Bot initialization and state changes are logged:
 
 ---
 
-*Last Updated: 2026-01-24 (added startup cache documentation)*
+*Last Updated: 2026-01-24 (Code Audit #1 complete - added CombatHelpers.h)*

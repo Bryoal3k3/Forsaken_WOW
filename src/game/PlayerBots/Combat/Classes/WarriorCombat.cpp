@@ -8,10 +8,7 @@
 
 #include "WarriorCombat.h"
 #include "CombatBotBaseAI.h"
-#include "Player.h"
-#include "Unit.h"
-#include "MotionMaster.h"
-#include "Log.h"
+#include "../CombatHelpers.h"
 
 WarriorCombat::WarriorCombat(CombatBotBaseAI* pAI)
     : m_pAI(pAI)
@@ -20,17 +17,7 @@ WarriorCombat::WarriorCombat(CombatBotBaseAI* pAI)
 
 bool WarriorCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    // Warriors use melee - Attack + Chase
-    if (pBot->Attack(pTarget, true))
-    {
-        pBot->GetMotionMaster()->MoveChase(pTarget);
-        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[WarriorCombat] %s engaging %s (Attack success)",
-            pBot->GetName(), pTarget->GetName());
-        return true;
-    }
-    sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[WarriorCombat] %s failed to engage %s (Attack returned false)",
-        pBot->GetName(), pTarget->GetName());
-    return false;
+    return CombatHelpers::EngageMelee(pBot, pTarget, "WarriorCombat");
 }
 
 void WarriorCombat::UpdateCombat(Player* pBot, Unit* pVictim)

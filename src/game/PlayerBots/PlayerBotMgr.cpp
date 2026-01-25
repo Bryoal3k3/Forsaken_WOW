@@ -21,6 +21,7 @@
 #include "RandomBotGenerator.h"
 #include "Strategies/VendoringStrategy.h"
 #include "Strategies/TravelingStrategy.h"
+#include "DangerZoneCache.h"
 
 INSTANTIATE_SINGLETON_1(PlayerBotMgr);
 
@@ -250,6 +251,9 @@ void PlayerBotMgr::Update(uint32 diff)
         else
             ++it;
     }
+
+    // Update danger zone cache (cleanup expired entries)
+    sDangerZoneCache.Update(diff);
 
     m_elapsedTime += diff;
     if (!((m_elapsedTime - m_lastUpdate) > m_confUpdateDiff))

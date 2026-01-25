@@ -1,8 +1,59 @@
 # Current Bug Tracker
 
-## Status: 0 ACTIVE BUGS
+## Status: 2 ACTIVE BUGS
 
-All known bugs have been fixed!
+---
+
+## Bug #1: Bot Falling Through Floor - NEEDS FIX
+
+**Status**: INVESTIGATING
+
+**Symptom**: Bot "Yenya" fell through the floor and caused infinite pathfinding error spam.
+
+**Error Log**:
+```
+ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=0 endPoly=3125 for Yenya from (-343.8,-4237.0,62.9) to (-381.5,-4183.2,55.8)
+(repeated infinitely)
+```
+
+**Key Details**:
+- `startPoly=0` means bot's current position has no navmesh polygon (below ground)
+- Bot was visually falling through the floor when observed
+- Location: Durotar area (-343.8, -4237.0, 62.9)
+- Causes infinite spam because bot keeps trying to pathfind every tick
+
+**Proposed Fix**:
+1. Detect falling through floor (Z dropping rapidly or no valid startPoly for X consecutive ticks)
+2. Teleport bot to hearthstone location to recover
+3. Rate-limit the error log to prevent spam
+
+---
+
+## Bug #2: Invalid StartPoly During Normal Grinding - INVESTIGATING
+
+**Status**: INVESTIGATING
+
+**Symptom**: Bots "Burarka" and "Wua" getting `startPoly=0` errors while grinding normally (NOT falling).
+
+**Error Log**:
+```
+ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=0 endPoly=8689 for Burarka from (-772.6,-4249.8,57.7) to (-792.0,-4284.0,56.5)
+ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=0 endPoly=8689 for Wua from (-772.6,-4249.8,57.7) to (-792.0,-4284.0,56.5)
+```
+
+**Key Details**:
+- `startPoly=0` but `endPoly=8689` means destination is valid, current position is not
+- Z values increasing: 57.7 → 58.3 → 58.8 → 59.3 (walking UP a slope, not falling)
+- Bots grinding normally, not visually stuck
+- Location: Durotar area (-772, -4249)
+- Possibly on edge of navmesh coverage or slope without navmesh
+
+**Investigation Needed**:
+- Check if this area has proper navmesh coverage
+- Determine if bots are on terrain edge/slope
+- May need to add tolerance or recovery logic
+
+---
 
 ---
 
@@ -22,6 +73,50 @@ All known bugs have been fixed!
 ---
 
 ## Recently Fixed (2026-01-25)
+
+### PathFinder Long Path Bug - FIXED
+
+**Issue**: Long paths (Kharanos → Coldridge Valley, ~1000 yards) failed with `PATHFIND_NOPATH` (PathType 8) even though the path existed. Multiple bots trying to validate the same long path would all fail.
+
+**Root Cause**: Bug in vMangos `PathFinder.cpp:findSmoothPath()`. When the smooth path filled the 256-point buffer, it returned `DT_FAILURE` instead of `DT_SUCCESS | DT_BUFFER_TOO_SMALL`. The original comment said "this is most likely a loop" - assuming buffer full = infinite loop. But for long paths, 256 waypoints is legitimately not enough.
+
+**Debug Evidence**:
+```
+BuildPointPath: FAILED result=0x80000000 pointCount=256 polyLength=79
+```
+- `findPath()` SUCCEEDED (79 polygons found)
+- `findSmoothPath()` filled buffer with 256 valid waypoints
+- Then returned `DT_FAILURE` (0x80000000) instead of success with truncation flag
+
+**Fix** (2 parts):
+
+1. **findSmoothPath() return value** - Return proper truncation status:
+   ```cpp
+   // OLD: return nsmoothPath < MAX_POINT_PATH_LENGTH ? DT_SUCCESS : DT_FAILURE;
+   // NEW:
+   return nsmoothPath < MAX_POINT_PATH_LENGTH ? DT_SUCCESS : (DT_SUCCESS | DT_BUFFER_TOO_SMALL);
+   ```
+
+2. **BuildPointPath() handling** - Mark truncated paths as INCOMPLETE:
+   ```cpp
+   if (dtResult & DT_BUFFER_TOO_SMALL)
+       m_type = PATHFIND_INCOMPLETE;
+   ```
+
+**Why Safe**:
+- `PATHFIND_INCOMPLETE` already used throughout codebase for partial paths
+- `TargetedMovementGenerator` already handles incomplete paths
+- Semantically correct: truncated path IS incomplete, not "no path"
+- Better than before: units get 256 valid waypoints instead of wall-ignoring shortcut
+
+**Files Modified**:
+- `src/game/Maps/PathFinder.cpp` - Fixed findSmoothPath return + BuildPointPath handling
+
+**Debug Logging**: Bot-only PathFinder logging left in place (filtered by `IsPlayerBot()`) for future debugging.
+
+**Tested**: Bots now successfully validate and travel long paths (Kharanos → Coldridge Valley).
+
+---
 
 ### Movement Sync Bug (Travel System) - FIXED
 
@@ -124,4 +219,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-25 (All bugs fixed - movement sync bug resolved with waypoint segmentation)*
+*Last Updated: 2026-01-25 (2 new bugs: falling through floor + invalid startPoly during grinding)*

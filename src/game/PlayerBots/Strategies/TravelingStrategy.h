@@ -18,6 +18,7 @@
 
 class Player;
 class VendoringStrategy;
+struct DangerZone;
 
 // Cached grind spot data (loaded once at startup)
 struct GrindSpotData
@@ -124,6 +125,12 @@ private:
     bool ValidatePath(Player* pBot, float destX, float destY, float destZ);
     void GenerateWaypoints(Player* pBot);
     void MoveToCurrentWaypoint(Player* pBot);
+
+    // Danger zone avoidance
+    void FilterWaypointsForDanger(Player* pBot);
+    Vector3 CalculateDetourPoint(Player* pBot, Vector3 const& fromPoint,
+                                  Vector3 const& blockedPoint,
+                                  std::vector<DangerZone> const& dangers) const;
 
     // Waypoint tracking
     std::vector<Vector3> m_waypoints;

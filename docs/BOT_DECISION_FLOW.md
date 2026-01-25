@@ -135,6 +135,13 @@ if (grindResult == NO_TARGETS && noMobsCount >= 5)
 | `STUCK_TIMEOUT_MS` | 30000ms | Reset if no progress |
 | `BAG_FULL_THRESHOLD` | 60% | Pre-travel vendor check |
 | `DURABILITY_THRESHOLD` | 50% | Pre-travel vendor check |
+| `WAYPOINT_SEGMENT_SIZE` | 200 yards | Max distance per waypoint segment |
+
+**Waypoint System:**
+- Long journeys are split into ~200 yard segments
+- Each segment uses `MovePoint()` with `MOVE_PATHFINDING` flag
+- `MovementInform()` callback triggers next segment immediately
+- Path validated before travel using `PathFinder::calculate()`
 
 ### Death Handling (GhostWalkingStrategy.h)
 
@@ -262,6 +269,23 @@ Bot initialization and state changes are logged:
 [RandomBotAI] Bot Grommash initialized (Class: 1, Level: 5, Strategy: Grinding)
 ```
 
+### PathFinder Debug Logging (Bot-Only)
+PathFinder has debug logging filtered to only fire for player bots. Logs are prefixed with `[BOT]`:
+```
+[BOT] PathFinder::BuildPolyPath ENTER: BotName from (x,y,z) to (x,y,z)
+[BOT] PathFinder::BuildPolyPath BotName: startPoly=XXX endPoly=XXX
+[BOT] PathFinder::BuildPolyPath BotName: findPath result=0x0 polyLength=XX
+[BOT] PathFinder::BuildPointPath BotName: result=0x0 pointCount=XX
+```
+
+**Key PathFinder Results:**
+| Result Code | Meaning |
+|-------------|---------|
+| `0x40000000` | `DT_SUCCESS` - Path found |
+| `0x40000010` | `DT_SUCCESS \| DT_BUFFER_TOO_SMALL` - Path found but truncated (INCOMPLETE) |
+| `0x80000000` | `DT_FAILURE` - No path found |
+| `startPoly=0` | Bot's current position has no navmesh (falling through floor or bad location) |
+
 ### Common Issues
 
 | Symptom | Likely Cause |
@@ -271,7 +295,42 @@ Bot initialization and state changes are logged:
 | Bot won't vendor | Bags not 100% full, gear not broken |
 | Bot stuck traveling | Navmesh issue, stuck timeout will reset |
 | Bot slow to find mobs | Backoff active from previous empty search (resets when mob found) |
+| "Cannot reach" spam | Long path exceeding 256 waypoints (fixed), or navmesh hole |
+| `startPoly=0` errors | Bot at invalid position (falling through floor or navmesh edge) |
+| Bot falling through floor | Bad spawn location or navmesh gap - needs HS teleport recovery |
 
 ---
 
-*Last Updated: 2026-01-24 (Code Audit #1 complete - added CombatHelpers.h)*
+## PathFinder Integration
+
+### How Travel Uses PathFinder
+
+```
+TravelingStrategy::StartTravel()
+├── ValidatePath(destination)              // Check if path exists
+│   └── PathFinder::calculate()
+│       ├── BuildPolyPath() - Find polygon path
+│       └── BuildPointPath() - Generate smooth waypoints
+│           └── findSmoothPath() - Up to 256 waypoints
+├── If PATHFIND_NOPATH → Abort travel
+├── If PATHFIND_NORMAL or PATHFIND_INCOMPLETE → Proceed
+└── GenerateWaypoints() - Split into 200-yard segments
+```
+
+### PathType Values
+| Type | Value | Meaning |
+|------|-------|---------|
+| `PATHFIND_BLANK` | 0x00 | Path not built yet |
+| `PATHFIND_NORMAL` | 0x01 | Complete valid path |
+| `PATHFIND_SHORTCUT` | 0x02 | Direct line (ignores terrain) |
+| `PATHFIND_INCOMPLETE` | 0x04 | Partial path (truncated or can't reach end) |
+| `PATHFIND_NOPATH` | 0x08 | No valid path exists |
+
+### Long Path Handling (Fixed 2026-01-25)
+- Paths longer than 256 waypoints now return `PATHFIND_INCOMPLETE` instead of `PATHFIND_NOPATH`
+- `ValidatePath()` accepts both `PATHFIND_NORMAL` and `PATHFIND_INCOMPLETE`
+- Bots follow the truncated path and can recalculate when near the end
+
+---
+
+*Last Updated: 2026-01-25 (PathFinder debug logging + long path fix)*

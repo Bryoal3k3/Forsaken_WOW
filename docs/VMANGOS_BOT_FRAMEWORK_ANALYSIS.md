@@ -348,9 +348,89 @@ For custom AI implementation, study these in order:
 5. `Combat/Classes/*Combat.cpp` - Class-specific handlers
 6. `PartyBotAI.cpp` - Example class-specific routines
 7. `PlayerBotMgr.cpp` - Bot lifecycle management
+8. `Strategies/TravelingStrategy.cpp` - Travel and pathfinding
+9. `src/game/Maps/PathFinder.cpp` - NavMesh pathfinding (core vMangos)
+
+---
+
+## 12. PathFinder and Navigation
+
+### PathFinder Overview
+vMangos uses Detour (from Recast Navigation) for navmesh-based pathfinding.
+
+**Key Files:**
+- `src/game/Maps/PathFinder.h/cpp` - Wrapper around Detour
+- `src/game/Maps/MoveMap.h/cpp` - NavMesh tile management
+- `dep/recastnavigation/Detour/` - Detour library
+
+### PathFinder Usage
+```cpp
+PathFinder path(pUnit);
+path.calculate(destX, destY, destZ);
+
+PathType type = path.getPathType();
+// PATHFIND_NORMAL (0x01) = complete path
+// PATHFIND_INCOMPLETE (0x04) = partial path (truncated or can't reach end)
+// PATHFIND_NOPATH (0x08) = no valid path
+
+PointsArray const& points = path.getPath();
+// Vector of Vector3 waypoints
+```
+
+### Key PathFinder Internals
+1. **BuildPolyPath()** - Finds polygon path from A to B using `findPath()`
+2. **BuildPointPath()** - Converts polygons to smooth waypoints using `findSmoothPath()`
+3. **findSmoothPath()** - vMangos custom function that walks the polygon path
+
+### Important Limits
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `MAX_PATH_LENGTH` | 256 | Max polygons in path |
+| `MAX_POINT_PATH_LENGTH` | 256 | Max smooth waypoints |
+
+### PathFinder Fix Applied (2026-01-25)
+Long paths (>256 waypoints) now correctly return `PATHFIND_INCOMPLETE` instead of `PATHFIND_NOPATH`. See PROGRESS.md for details.
+
+### Debug Logging
+Bot-only PathFinder logging added (filtered by `IsPlayerBot()` helper). All logs prefixed with `[BOT]`.
+
+---
+
+## 13. RandomBot Strategy System
+
+### Strategy Architecture
+```
+RandomBotAI
+├── GrindingStrategy      ← Default: find and kill mobs
+├── VendoringStrategy     ← Sell items, repair gear
+├── TravelingStrategy     ← Move to new grind spots
+├── GhostWalkingStrategy  ← Handle death/resurrection
+├── LootingBehavior       ← Universal: loot corpses
+└── BotCombatMgr          ← Combat handler coordinator
+```
+
+### IBotStrategy Interface
+```cpp
+class IBotStrategy
+{
+public:
+    virtual bool Update(Player* pBot, uint32 diff) = 0;
+    virtual void OnEnterCombat(Player* pBot) = 0;
+    virtual void OnLeaveCombat(Player* pBot) = 0;
+    virtual char const* GetName() const = 0;
+};
+```
+
+### TravelingStrategy Flow
+1. GrindingStrategy reports NO_TARGETS for 5 consecutive ticks
+2. TravelingStrategy queries cached grind spots (loaded at startup)
+3. ValidatePath() checks if destination is reachable
+4. GenerateWaypoints() splits journey into ~200 yard segments
+5. MovementInform() callback chains segments together
+6. Bot arrives, 90-second cooldown before traveling again
 
 ---
 
 *Generated: 2026-01-08*
-*Updated: 2025-01-11 - Added RandomBot combat handler system*
+*Updated: 2026-01-25 - Added PathFinder/Navigation section, Strategy system*
 *Purpose: Pre-implementation research for bot framework extension*

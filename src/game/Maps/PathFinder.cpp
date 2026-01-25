@@ -19,6 +19,7 @@
 #include "MoveMap.h"
 #include "GridMap.h"
 #include "Creature.h"
+#include "Player.h"
 #include "PathFinder.h"
 #include "Log.h"
 #include "Map.h"
@@ -26,6 +27,14 @@
 #include "Geometry.h"
 
 #include "Detour/Include/DetourCommon.h"
+
+// Helper: Returns true if this unit is a player bot (for debug logging)
+static inline bool IsPlayerBot(Unit const* unit)
+{
+    if (!unit || unit->GetTypeId() != TYPEID_PLAYER)
+        return false;
+    return static_cast<Player const*>(unit)->IsBot();
+}
 
 // Distance to target
 #define SMOOTH_PATH_SLOP 0.4f
@@ -131,14 +140,21 @@ dtPolyRef PathInfo::FindWalkPoly(dtNavMeshQuery const* query, float const* point
 
     // WARNING : Nav mesh coords are Y, Z, X (and not X, Y, Z)
     float extents[3] = {5.0f, zSearchDist, 5.0f};
-    dtPolyRef polyRef;
+    dtPolyRef polyRef = 0;
 
     // Default recastnavigation method
-    if (dtStatusFailed(query->findNearestPoly(pointYZX, extents, &filter, &polyRef, closestPointYZX)))
+    dtStatus status = query->findNearestPoly(pointYZX, extents, &filter, &polyRef, closestPointYZX);
+    if (dtStatusFailed(status))
+    {
+        // Note: FindWalkPoly is static, so we can't filter by bot here
+        // These logs are rare (actual failures) so leaving them in
         return 0;
+    }
     // Do not select points over player pos
     if (closestPointYZX[1] > pointYZX[1] + 3.0f)
+    {
         return 0;
+    }
     return polyRef;
 }
 
@@ -158,6 +174,14 @@ dtPolyRef PathInfo::getPolyByLocation(float const* point, float *distance, uint3
 
 void PathInfo::BuildPolyPath(Vector3 const& startPos, Vector3 const& endPos)
 {
+    // DEBUG: Log entry with coordinates (bots only)
+    if (IsPlayerBot(m_sourceUnit))
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+            "[BOT] PathFinder::BuildPolyPath ENTER: %s from (%.1f,%.1f,%.1f) to (%.1f,%.1f,%.1f)",
+            m_sourceUnit->GetName(), startPos.x, startPos.y, startPos.z, endPos.x, endPos.y, endPos.z);
+    }
+
     // *** getting start/end poly logic ***
 
     float distToStartPoly, distToEndPoly;
@@ -188,12 +212,27 @@ void PathInfo::BuildPolyPath(Vector3 const& startPos, Vector3 const& endPos)
     dtPolyRef startPoly = getPolyByLocation(startPoint, &distToStartPoly);
     dtPolyRef endPoly = getPolyByLocation(endPoint, &distToEndPoly, m_targetAllowedFlags);
 
+    // DEBUG: Log poly lookup results (bots only)
+    if (IsPlayerBot(m_sourceUnit))
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+            "[BOT] PathFinder::BuildPolyPath %s: startPoly=%u (dist=%.1f) endPoly=%u (dist=%.1f)",
+            m_sourceUnit->GetName(), startPoly, distToStartPoly, endPoly, distToEndPoly);
+    }
+
     // we have a hole in our mesh
     // make shortcut path and mark it as NOPATH ( with flying exception )
     // its up to caller how he will use this info
     if (startPoly == INVALID_POLYREF || endPoly == INVALID_POLYREF)
     {
-        //DEBUG_FILTER_LOG(LOG_FILTER_PATHFINDING, "++ BuildPolyPath :: (startPoly == 0 || endPoly == 0)\n");
+        if (IsPlayerBot(m_sourceUnit))
+        {
+            sLog.Out(LOG_BASIC, LOG_LVL_ERROR,
+                "[BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=%u endPoly=%u for %s "
+                "from (%.1f,%.1f,%.1f) to (%.1f,%.1f,%.1f)",
+                startPoly, endPoly, m_sourceUnit->GetName(),
+                startPos.x, startPos.y, startPos.z, endPos.x, endPos.y, endPos.z);
+        }
         BuildShortcut();
         // Check for swimming or flying shortcut
         if ((startPoly == INVALID_POLYREF && m_sourceUnit->GetTerrain()->IsSwimmable(startPos.x, startPos.y, startPos.z)) ||
@@ -361,10 +400,13 @@ void PathInfo::BuildPolyPath(Vector3 const& startPos, Vector3 const& endPos)
         // free and invalidate old path data
         clear();
 
-        // std::thread::id const threadId = std::this_thread::get_id();
-
-        //if (threadId != m_navMeshQuery->m_owningThread)
-            //sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "CRASH: We are using a dtNavMeshQuery from thread %u which belongs to thread %u!", threadId, m_navMeshQuery->m_owningThread);
+        // DEBUG: Log before findPath (bots only)
+        if (IsPlayerBot(m_sourceUnit))
+        {
+            sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+                "[BOT] PathFinder::BuildPolyPath %s: Calling findPath startPoly=%u endPoly=%u",
+                m_sourceUnit->GetName(), startPoly, endPoly);
+        }
 
         dtStatus dtResult = m_navMeshQuery->findPath(
                                 startPoly,          // start polygon
@@ -376,10 +418,23 @@ void PathInfo::BuildPolyPath(Vector3 const& startPos, Vector3 const& endPos)
                                 (int*)&m_polyLength,
                                 MAX_PATH_LENGTH);   // max number of polygons in output path
 
+        // DEBUG: Log findPath result (bots only)
+        if (IsPlayerBot(m_sourceUnit))
+        {
+            sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+                "[BOT] PathFinder::BuildPolyPath %s: findPath result=0x%x polyLength=%u",
+                m_sourceUnit->GetName(), dtResult, m_polyLength);
+        }
+
         if (!m_polyLength || dtStatusFailed(dtResult))
         {
             // only happens if we passed bad data to findPath(), or navmesh is messed up
-            sLog.Out(LOG_BASIC, LOG_LVL_ERROR, "%u's Path Build failed: 0 length path. Result=0x%x", m_sourceUnit->GetGUIDLow(), dtResult);
+            if (IsPlayerBot(m_sourceUnit))
+            {
+                sLog.Out(LOG_BASIC, LOG_LVL_ERROR,
+                    "[BOT] PathFinder::BuildPolyPath %s: findPath FAILED result=0x%x polyLength=%u - returning NOPATH",
+                    m_sourceUnit->GetName(), dtResult, m_polyLength);
+            }
             BuildShortcut();
             m_type = PATHFIND_NOPATH;
             return;
@@ -392,11 +447,27 @@ void PathInfo::BuildPolyPath(Vector3 const& startPos, Vector3 const& endPos)
     else
         m_type = PATHFIND_INCOMPLETE;
 
+    // DEBUG: Log before BuildPointPath (bots only)
+    if (IsPlayerBot(m_sourceUnit))
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+            "[BOT] PathFinder::BuildPolyPath %s: Success so far, polyLength=%u type=%u, calling BuildPointPath",
+            m_sourceUnit->GetName(), m_polyLength, m_type);
+    }
+
     BuildPointPath(startPoint, endPoint, distToStartPoly, distToEndPoly);
 }
 
 void PathInfo::BuildPointPath(float const* startPoint, float const* endPoint, float distToStartPoly, float distToEndPoly)
 {
+    // DEBUG: Log entry (bots only)
+    if (IsPlayerBot(m_sourceUnit))
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+            "[BOT] PathFinder::BuildPointPath ENTER: %s polyLength=%u useStraight=%d",
+            m_sourceUnit->GetName(), m_polyLength, m_useStraightPath);
+    }
+
     // generate the point-path out of our up-to-date poly-path
     float pathPoints[MAX_POINT_PATH_LENGTH * VERTEX_SIZE];
     uint32 pointCount = 0;
@@ -426,15 +497,34 @@ void PathInfo::BuildPointPath(float const* startPoint, float const* endPoint, fl
                        m_pointPathLimit);    // maximum number of points
     }
 
+    // DEBUG: Log smoothPath/straightPath result (bots only)
+    if (IsPlayerBot(m_sourceUnit))
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+            "[BOT] PathFinder::BuildPointPath %s: result=0x%x pointCount=%u",
+            m_sourceUnit->GetName(), dtResult, pointCount);
+    }
+
+    // Check for true failure (not just buffer overflow with valid points)
     if (pointCount < 2 || dtStatusFailed(dtResult))
     {
         // only happens if pass bad data to findStraightPath or navmesh is broken
         // single point paths can be generated here
-        // TODO : check the exact cases
-        //DEBUG_FILTER_LOG(LOG_FILTER_PATHFINDING, "++ PathFinder::BuildPointPath FAILED! path sized %d returned\n", pointCount);
+        if (IsPlayerBot(m_sourceUnit))
+        {
+            sLog.Out(LOG_BASIC, LOG_LVL_ERROR,
+                "[BOT] PathFinder::BuildPointPath %s: FAILED result=0x%x pointCount=%u polyLength=%u - returning NOPATH",
+                m_sourceUnit->GetName(), dtResult, pointCount, m_polyLength);
+        }
         BuildShortcut();
         m_type = PATHFIND_NOPATH;
         return;
+    }
+
+    // If buffer was too small, we have a valid but truncated path - mark as incomplete
+    if (dtResult & DT_BUFFER_TOO_SMALL)
+    {
+        m_type = PATHFIND_INCOMPLETE;
     }
 
     m_pathPoints.resize(pointCount);
@@ -1019,8 +1109,9 @@ dtStatus PathInfo::findSmoothPath(float const* startPos, float const* endPos,
 
     *smoothPathSize = nsmoothPath;
 
-    // this is most likely a loop
-    return nsmoothPath < MAX_POINT_PATH_LENGTH ? DT_SUCCESS : DT_FAILURE;
+    // If we hit the buffer limit, return success with buffer-too-small flag
+    // (not failure - the path exists, it's just truncated)
+    return nsmoothPath < MAX_POINT_PATH_LENGTH ? DT_SUCCESS : (DT_SUCCESS | DT_BUFFER_TOO_SMALL);
 }
 
 // Nostalrius

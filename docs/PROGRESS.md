@@ -25,6 +25,76 @@ All Phase 5 bugs have been fixed:
 - ✅ Movement sync bug (waypoint segmentation + terrain flags)
 - ✅ Pre-travel vendor check (ForceStart wired up)
 - ✅ Combat facing bug (SetFacingToObject added)
+- ✅ PathFinder long path bug (truncated paths return INCOMPLETE not NOPATH)
+
+### Current Active Bugs (See docs/CURRENT_BUG.md)
+- 🔴 Bot falling through floor (needs HS teleport recovery)
+- 🔴 Invalid startPoly during normal grinding (navmesh edge cases in Durotar)
+
+---
+
+## Danger Zone System (Implemented - Disabled)
+
+A reactive danger zone cache was implemented for threat avoidance during travel but is currently disabled pending the PathFinder bugs above being resolved.
+
+**Files Created:**
+- `DangerZoneCache.h/cpp` - Singleton spatial grid cache
+
+**How It Works:**
+1. Bot traveling gets attacked by mob 3+ levels higher
+2. Bot reports danger location to `sDangerZoneCache`
+3. Subsequent bots query cache when generating waypoints
+4. Waypoints passing through danger zones are filtered out
+5. Cache entries expire after 5 minutes
+
+**To Enable:** Uncomment code in:
+- `RandomBotAI.cpp:UpdateOutOfCombatAI()` - ReportDanger call
+- `TravelingStrategy.cpp:GenerateWaypoints()` - FilterWaypointsForDanger call
+
+---
+
+## 2026-01-25 - PATHFINDER LONG PATH FIX
+
+### Problem
+Long-distance travel paths (e.g., Kharanos → Coldridge Valley, ~1000 yards) were failing with `PATHFIND_NOPATH` even though the path existed. Debug logging revealed:
+```
+BuildPointPath: FAILED result=0x80000000 pointCount=256 polyLength=79
+```
+
+### Root Cause
+Bug in vMangos `PathFinder.cpp:findSmoothPath()`. When generating smooth waypoints from a poly path, if the 256-point buffer filled up, it returned `DT_FAILURE` instead of `DT_SUCCESS | DT_BUFFER_TOO_SMALL`.
+
+The original code comment said "this is most likely a loop" - assuming full buffer = infinite loop. But for long paths (79 polygons), 256 waypoints is legitimately not enough.
+
+### Solution
+
+**Part 1: Fix findSmoothPath() return value**
+```cpp
+// OLD (wrong):
+return nsmoothPath < MAX_POINT_PATH_LENGTH ? DT_SUCCESS : DT_FAILURE;
+
+// NEW (correct):
+return nsmoothPath < MAX_POINT_PATH_LENGTH ? DT_SUCCESS : (DT_SUCCESS | DT_BUFFER_TOO_SMALL);
+```
+
+**Part 2: Handle truncation in BuildPointPath()**
+```cpp
+// Mark truncated paths as INCOMPLETE, not NOPATH
+if (dtResult & DT_BUFFER_TOO_SMALL)
+    m_type = PATHFIND_INCOMPLETE;
+```
+
+### Why This Is Safe
+- `PATHFIND_INCOMPLETE` is already used throughout vMangos for partial paths
+- `TargetedMovementGenerator` already handles incomplete paths properly
+- Semantically correct: a truncated path IS an incomplete path
+- Better behavior: units get 256 valid waypoints instead of a terrain-ignoring shortcut
+
+### Files Modified
+- `src/game/Maps/PathFinder.cpp` - Fixed findSmoothPath return value and BuildPointPath handling
+
+### Debug Logging
+Added bot-only PathFinder logging (filtered by `IsPlayerBot()` helper function) for future debugging. Logs are prefixed with `[BOT]`.
 
 ---
 

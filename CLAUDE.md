@@ -62,6 +62,7 @@ src/game/PlayerBots/
 ├── RandomBotGenerator.h/cpp    ← Auto-generation on first launch
 ├── PlayerBotMgr.h/cpp          ← Bot lifecycle management
 ├── BotCheats.h/cpp             ← Cheat utilities (resting)
+├── DangerZoneCache.h/cpp       ← Shared cache for dangerous mob locations (future use)
 │
 ├── Combat/                     ← Combat system (class-specific handlers)
 │   ├── IClassCombat.h          ← Interface for class handlers
@@ -111,6 +112,13 @@ src/game/PlayerBots/
 | `CombatBotBaseAI.cpp` | Combat utilities (spell casting, targeting, spell data) |
 | `PartyBotAI.cpp` | Working bot example - study for patterns |
 | `PlayerBotAI.cpp:361-377` | `CreatePlayerBotAI()` - register new AI types here |
+| `DangerZoneCache.cpp` | Shared danger zone cache (currently disabled, for future threat avoidance) |
+
+### Core vMangos Files Modified
+
+| File | Modification |
+|------|--------------|
+| `src/game/Maps/PathFinder.cpp` | Fixed long path bug + added bot-only debug logging |
 
 ---
 
@@ -208,4 +216,37 @@ mysql -u mangos -pmangos realmd      # Accounts DB (RNDBOT accounts)
 
 ---
 
-*Last Updated: 2026-01-24*
+## Known Issues & Fixes Applied
+
+### PathFinder Long Path Bug (FIXED 2026-01-25)
+
+**Problem**: Long-distance paths (>256 waypoints) failed with `PATHFIND_NOPATH` even though the path existed.
+
+**Root Cause**: `PathFinder.cpp:findSmoothPath()` returned `DT_FAILURE` when the 256-point buffer filled up, instead of `DT_SUCCESS | DT_BUFFER_TOO_SMALL`.
+
+**Fix Applied**:
+1. Changed `findSmoothPath()` to return `DT_SUCCESS | DT_BUFFER_TOO_SMALL` for truncated paths
+2. Added handling in `BuildPointPath()` to mark truncated paths as `PATHFIND_INCOMPLETE`
+
+**Debug Logging**: Bot-only PathFinder logging added (filtered by `IsPlayerBot()` helper). Logs prefixed with `[BOT]`.
+
+### Active Bugs (See docs/CURRENT_BUG.md)
+- Bot falling through floor (needs HS teleport recovery)
+- Invalid startPoly during normal grinding (navmesh edge cases)
+
+---
+
+## Danger Zone System (Disabled - Future Feature)
+
+A reactive danger zone cache system was implemented but is currently disabled pending testing:
+
+- `DangerZoneCache.h/cpp` - Singleton spatial grid cache for dangerous locations
+- When a bot is attacked by a mob 3+ levels higher while traveling, it reports the location
+- Subsequent bots query the cache and can avoid known dangers
+- Integration code in `RandomBotAI.cpp` and `TravelingStrategy.cpp` is commented out
+
+To enable: Uncomment the danger zone code in `RandomBotAI.cpp:UpdateOutOfCombatAI()` and `TravelingStrategy.cpp:GenerateWaypoints()`.
+
+---
+
+*Last Updated: 2026-01-25*

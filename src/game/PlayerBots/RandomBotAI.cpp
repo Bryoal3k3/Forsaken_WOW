@@ -13,6 +13,7 @@
 #include "Strategies/GhostWalkingStrategy.h"
 #include "Strategies/VendoringStrategy.h"
 #include "Strategies/TravelingStrategy.h"
+#include "DangerZoneCache.h"
 #include "Player.h"
 #include "Creature.h"
 #include "Corpse.h"
@@ -236,6 +237,34 @@ void RandomBotAI::UpdateOutOfCombatAI()
         Unit* pAttacker = *me->GetAttackers().begin();
         if (pAttacker && pAttacker->IsAlive() && me->IsValidAttackTarget(pAttacker))
         {
+            // TESTING: Commented out to isolate PathFinder issue
+            // If attacked by high-level creature while traveling, report danger zone
+            /*
+            if (Creature* pCreature = pAttacker->ToCreature())
+            {
+                int32 levelDiff = static_cast<int32>(pCreature->GetLevel()) - static_cast<int32>(me->GetLevel());
+                bool isTraveling = m_travelingStrategy && m_travelingStrategy->IsTraveling();
+
+                sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+                    "[RandomBotAI] %s attacked by %s (level %u, diff %d), traveling: %s",
+                    me->GetName(), pCreature->GetName(), pCreature->GetLevel(), levelDiff,
+                    isTraveling ? "YES" : "NO");
+
+                if (isTraveling && levelDiff >= DangerZoneConstants::LEVEL_DIFF_THRESHOLD)
+                {
+                    sLog.Out(LOG_BASIC, LOG_LVL_BASIC,
+                        "[RandomBotAI] %s reporting danger zone from %s (level %u)",
+                        me->GetName(), pCreature->GetName(), pCreature->GetLevel());
+
+                    sDangerZoneCache.ReportDanger(
+                        me->GetMapId(),
+                        me->GetPositionX(),
+                        me->GetPositionY(),
+                        pCreature->GetLevel());
+                }
+            }
+            */
+
             me->Attack(pAttacker, true);
             return;
         }

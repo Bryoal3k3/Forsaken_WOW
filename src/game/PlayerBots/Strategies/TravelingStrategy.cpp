@@ -9,6 +9,7 @@
 
 #include "TravelingStrategy.h"
 #include "VendoringStrategy.h"
+#include "DangerZoneCache.h"
 #include "Player.h"
 #include "MotionMaster.h"
 #include "Log.h"
@@ -384,14 +385,17 @@ bool TravelingStrategy::ValidatePath(Player* pBot, float destX, float destY, flo
 
     PathType type = path.getPathType();
 
+    sLog.Out(LOG_BASIC, LOG_LVL_BASIC,
+        "[TravelingStrategy] %s: ValidatePath from (%.1f, %.1f, %.1f) to (%.1f, %.1f, %.1f) - PathType: %u",
+        pBot->GetName(),
+        pBot->GetPositionX(), pBot->GetPositionY(), pBot->GetPositionZ(),
+        destX, destY, destZ, static_cast<uint32>(type));
+
     // PATHFIND_NORMAL = fully valid path
     // PATHFIND_INCOMPLETE = partial path (can still try)
     // PATHFIND_NOPATH = completely invalid
     if (type & PATHFIND_NOPATH)
     {
-        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
-            "[TravelingStrategy] %s: No valid path to (%.1f, %.1f, %.1f)",
-            pBot->GetName(), destX, destY, destZ);
         return false;
     }
 
@@ -452,6 +456,10 @@ void TravelingStrategy::GenerateWaypoints(Player* pBot)
             m_waypoints.back() = Vector3(m_targetX, m_targetY, m_targetZ);
     }
 
+    // TESTING: Commented out to isolate PathFinder issue
+    // Filter waypoints through danger cache and insert detours
+    // FilterWaypointsForDanger(pBot);
+
     m_waypointsGenerated = true;
 
     sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
@@ -498,4 +506,171 @@ void TravelingStrategy::OnWaypointReached(Player* pBot, uint32 waypointId)
 
     // Move to next waypoint immediately for smooth movement
     MoveToCurrentWaypoint(pBot);
+}
+
+void TravelingStrategy::FilterWaypointsForDanger(Player* pBot)
+{
+    if (!pBot || m_waypoints.empty())
+        return;
+
+    uint32 mapId = pBot->GetMapId();
+    uint8 botLevel = pBot->GetLevel();
+
+    // Track where we are coming from (bot's position initially)
+    Vector3 fromPoint(pBot->GetPositionX(), pBot->GetPositionY(), pBot->GetPositionZ());
+
+    // Check each waypoint and insert detours as needed
+    // Use index-based iteration since we may insert elements
+    for (size_t i = 0; i < m_waypoints.size(); ++i)
+    {
+        Vector3& wp = m_waypoints[i];
+
+        // Check if this waypoint is in a danger zone
+        if (!sDangerZoneCache.IsDangerous(mapId, wp.x, wp.y, botLevel))
+        {
+            fromPoint = wp;
+            continue;
+        }
+
+        // Get nearby dangers for detour calculation
+        std::vector<DangerZone> dangers;
+        sDangerZoneCache.GetNearbyDangers(mapId, wp.x, wp.y,
+            DangerZoneConstants::DANGER_RADIUS * 1.5f, dangers);
+
+        if (dangers.empty())
+        {
+            fromPoint = wp;
+            continue;
+        }
+
+        // Calculate detour point
+        Vector3 detour = CalculateDetourPoint(pBot, fromPoint, wp, dangers);
+
+        // Validate the detour isn't also dangerous
+        if (sDangerZoneCache.IsDangerous(mapId, detour.x, detour.y, botLevel))
+        {
+            // Try opposite direction
+            Vector3 oppositeDetour = CalculateDetourPoint(pBot, fromPoint, wp, dangers);
+            // Flip the perpendicular direction by negating the offset
+            float midX = (fromPoint.x + wp.x) / 2.0f;
+            float midY = (fromPoint.y + wp.y) / 2.0f;
+            oppositeDetour.x = 2.0f * midX - detour.x;
+            oppositeDetour.y = 2.0f * midY - detour.y;
+
+            if (!sDangerZoneCache.IsDangerous(mapId, oppositeDetour.x, oppositeDetour.y, botLevel))
+            {
+                detour = oppositeDetour;
+            }
+            else
+            {
+                // Both directions blocked - log and skip (bot may die, learning experience)
+                sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+                    "[TravelingStrategy] %s: Waypoint %zu surrounded by danger, no safe detour",
+                    pBot->GetName(), i);
+                fromPoint = wp;
+                continue;
+            }
+        }
+
+        // Get terrain height for detour point
+        if (Map* map = pBot->GetMap())
+        {
+            float detourZ = map->GetHeight(detour.x, detour.y, MAX_HEIGHT);
+            if (detourZ > INVALID_HEIGHT)
+            {
+                detour.z = detourZ;
+            }
+            else
+            {
+                // Invalid height - skip this detour, it's off the navmesh
+                sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+                    "[TravelingStrategy] %s: Detour point (%.1f, %.1f) has invalid height, skipping",
+                    pBot->GetName(), detour.x, detour.y);
+                fromPoint = wp;
+                continue;
+            }
+        }
+
+        // Validate the detour path is reachable
+        if (!ValidatePath(pBot, detour.x, detour.y, detour.z))
+        {
+            sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+                "[TravelingStrategy] %s: Detour point (%.1f, %.1f) not reachable, skipping",
+                pBot->GetName(), detour.x, detour.y);
+            fromPoint = wp;
+            continue;
+        }
+
+        // Insert detour before the dangerous waypoint
+        m_waypoints.insert(m_waypoints.begin() + i, detour);
+
+        sLog.Out(LOG_BASIC, LOG_LVL_BASIC,
+            "[TravelingStrategy] %s: Inserted detour at (%.1f, %.1f, %.1f) to avoid danger zone",
+            pBot->GetName(), detour.x, detour.y, detour.z);
+
+        // Update fromPoint and skip to after the inserted detour
+        fromPoint = detour;
+        ++i;  // Skip the inserted detour, next iteration will check the original waypoint again
+    }
+}
+
+Vector3 TravelingStrategy::CalculateDetourPoint(
+    Player* pBot,
+    Vector3 const& fromPoint,
+    Vector3 const& blockedPoint,
+    std::vector<DangerZone> const& dangers) const
+{
+    // Calculate average danger position (centroid of threats)
+    float avgX = 0.0f, avgY = 0.0f;
+    for (auto const& d : dangers)
+    {
+        avgX += d.x;
+        avgY += d.y;
+    }
+    if (!dangers.empty())
+    {
+        avgX /= static_cast<float>(dangers.size());
+        avgY /= static_cast<float>(dangers.size());
+    }
+
+    // Direction from "from" to blocked waypoint
+    float dx = blockedPoint.x - fromPoint.x;
+    float dy = blockedPoint.y - fromPoint.y;
+    float len = std::sqrt(dx * dx + dy * dy);
+
+    if (len < 0.01f)
+    {
+        // Points are essentially the same
+        return blockedPoint;
+    }
+
+    // Normalize direction
+    dx /= len;
+    dy /= len;
+
+    // Perpendicular direction (rotate 90 degrees)
+    float px = -dy;
+    float py = dx;
+
+    // Determine which side of the path the danger is on
+    // Project danger centroid onto perpendicular axis
+    float midX = (fromPoint.x + blockedPoint.x) / 2.0f;
+    float midY = (fromPoint.y + blockedPoint.y) / 2.0f;
+
+    float dangerOffsetX = avgX - midX;
+    float dangerOffsetY = avgY - midY;
+    float dangerSide = dangerOffsetX * px + dangerOffsetY * py;
+
+    // Go to opposite side of the danger
+    float detourDir = (dangerSide > 0) ? -1.0f : 1.0f;
+
+    // Calculate detour point: perpendicular offset from midpoint
+    float detourDist = DangerZoneConstants::DETOUR_DISTANCE;
+
+    Vector3 detour;
+    detour.x = midX + px * detourDist * detourDir;
+    detour.y = midY + py * detourDist * detourDir;
+    detour.z = (fromPoint.z + blockedPoint.z) / 2.0f;  // Will be corrected with terrain height
+
+    return detour;
 }

@@ -11,6 +11,7 @@
 #define MANGOS_TRAVELINGSTRATEGY_H
 
 #include "IBotStrategy.h"
+#include "PathFinder.h"
 #include <string>
 #include <vector>
 #include <mutex>
@@ -45,6 +46,9 @@ namespace TravelConstants
     constexpr float ARRIVAL_DISTANCE = 30.0f;       // Consider "arrived" within 30 yards
     constexpr uint32 STUCK_TIMEOUT_MS = 30000;      // 30 sec without progress = stuck
     constexpr float STUCK_MIN_DISTANCE = 5.0f;      // Must move 5 yards per check
+
+    // Waypoint segmentation for long journeys
+    constexpr float WAYPOINT_SEGMENT_DISTANCE = 200.0f;  // Max yards per segment
 }
 
 class TravelingStrategy : public IBotStrategy
@@ -66,6 +70,9 @@ public:
 
     // Check if currently traveling
     bool IsTraveling() const;
+
+    // Called by RandomBotAI::MovementInform when waypoint reached
+    void OnWaypointReached(Player* pBot, uint32 waypointId);
 
     // Cache management (called once at startup from PlayerBotMgr::Load)
     static void BuildGrindSpotCache();
@@ -112,6 +119,17 @@ private:
     bool IsAtDestination(Player* pBot) const;
     bool ShouldTravel(Player* pBot) const;
     static uint8 GetBotFaction(Player* pBot);
+
+    // Path validation and waypoint generation
+    bool ValidatePath(Player* pBot, float destX, float destY, float destZ);
+    void GenerateWaypoints(Player* pBot);
+    void MoveToCurrentWaypoint(Player* pBot);
+
+    // Waypoint tracking
+    std::vector<Vector3> m_waypoints;
+    uint32 m_currentWaypoint = 0;
+    bool m_waypointsGenerated = false;
+    bool m_moveToNextWaypoint = false;
 };
 
 #endif // MANGOS_TRAVELINGSTRATEGY_H

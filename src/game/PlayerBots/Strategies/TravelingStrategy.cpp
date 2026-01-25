@@ -15,6 +15,7 @@
 #include "World.h"
 #include "Database/DatabaseEnv.h"
 #include "ProgressBar.h"
+#include "Map.h"
 #include <cmath>
 #include <cfloat>
 
@@ -131,19 +132,31 @@ bool TravelingStrategy::Update(Player* pBot, uint32 /*diff*/)
                 return false;
             }
 
+            // Validate path exists before committing to travel
+            if (!ValidatePath(pBot, m_targetX, m_targetY, m_targetZ))
+            {
+                sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                    "[TravelingStrategy] %s: Cannot reach %s, aborting travel",
+                    pBot->GetName(), m_targetName.c_str());
+                m_state = TravelState::IDLE;
+                m_noMobsSignaled = false;
+                return false;
+            }
+
             sLog.Out(LOG_BASIC, LOG_LVL_BASIC,
                 "[TravelingStrategy] %s traveling to %s (%.1f, %.1f, %.1f)",
                 pBot->GetName(), m_targetName.c_str(), m_targetX, m_targetY, m_targetZ);
+
+            // Generate waypoints for the journey
+            GenerateWaypoints(pBot);
 
             // Record starting position for stuck detection
             m_lastX = pBot->GetPositionX();
             m_lastY = pBot->GetPositionY();
             m_lastProgressTime = WorldTimer::getMSTime();
 
-            // Start moving with pathfinding
-            pBot->GetMotionMaster()->MovePoint(
-                0, m_targetX, m_targetY, m_targetZ,
-                MOVE_PATHFINDING | MOVE_RUN_MODE);
+            // Start moving to first waypoint
+            MoveToCurrentWaypoint(pBot);
 
             m_state = TravelState::WALKING;
             return true;
@@ -151,6 +164,13 @@ bool TravelingStrategy::Update(Player* pBot, uint32 /*diff*/)
 
         case TravelState::WALKING:
         {
+            // Check if we need to move to next waypoint (triggered by MovementInform)
+            if (m_moveToNextWaypoint)
+            {
+                m_moveToNextWaypoint = false;
+                MoveToCurrentWaypoint(pBot);
+            }
+
             if (IsAtDestination(pBot))
             {
                 sLog.Out(LOG_BASIC, LOG_LVL_BASIC,
@@ -160,6 +180,8 @@ bool TravelingStrategy::Update(Player* pBot, uint32 /*diff*/)
                 m_arrivalTime = WorldTimer::getMSTime();
                 m_state = TravelState::ARRIVED;
                 m_noMobsSignaled = false;
+                m_waypointsGenerated = false;
+                m_waypoints.clear();
                 return false;  // Let grinding take over
             }
 
@@ -184,6 +206,8 @@ bool TravelingStrategy::Update(Player* pBot, uint32 /*diff*/)
                     pBot->GetName());
                 m_state = TravelState::IDLE;
                 m_noMobsSignaled = false;
+                m_waypointsGenerated = false;
+                m_waypoints.clear();
                 return false;
             }
 
@@ -331,11 +355,9 @@ void TravelingStrategy::OnEnterCombat(Player* pBot)
 void TravelingStrategy::OnLeaveCombat(Player* pBot)
 {
     // Resume walking if we were interrupted
-    if (m_state == TravelState::WALKING && pBot)
+    if (m_state == TravelState::WALKING && pBot && m_waypointsGenerated)
     {
-        pBot->GetMotionMaster()->MovePoint(
-            0, m_targetX, m_targetY, m_targetZ,
-            MOVE_PATHFINDING | MOVE_RUN_MODE);
+        MoveToCurrentWaypoint(pBot);
     }
 }
 
@@ -350,4 +372,130 @@ void TravelingStrategy::ResetArrivalCooldown()
 bool TravelingStrategy::IsTraveling() const
 {
     return m_state == TravelState::WALKING;
+}
+
+bool TravelingStrategy::ValidatePath(Player* pBot, float destX, float destY, float destZ)
+{
+    if (!pBot)
+        return false;
+
+    PathFinder path(pBot);
+    path.calculate(destX, destY, destZ);
+
+    PathType type = path.getPathType();
+
+    // PATHFIND_NORMAL = fully valid path
+    // PATHFIND_INCOMPLETE = partial path (can still try)
+    // PATHFIND_NOPATH = completely invalid
+    if (type & PATHFIND_NOPATH)
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+            "[TravelingStrategy] %s: No valid path to (%.1f, %.1f, %.1f)",
+            pBot->GetName(), destX, destY, destZ);
+        return false;
+    }
+
+    return true;
+}
+
+void TravelingStrategy::GenerateWaypoints(Player* pBot)
+{
+    m_waypoints.clear();
+    m_currentWaypoint = 0;
+    m_moveToNextWaypoint = false;
+
+    if (!pBot)
+        return;
+
+    float startX = pBot->GetPositionX();
+    float startY = pBot->GetPositionY();
+    float startZ = pBot->GetPositionZ();
+
+    float dx = m_targetX - startX;
+    float dy = m_targetY - startY;
+    float totalDist = std::sqrt(dx * dx + dy * dy);
+
+    if (totalDist <= WAYPOINT_SEGMENT_DISTANCE)
+    {
+        // Short distance - single waypoint at destination
+        m_waypoints.push_back(Vector3(m_targetX, m_targetY, m_targetZ));
+    }
+    else
+    {
+        // Long distance - generate intermediate waypoints
+        uint32 numSegments = static_cast<uint32>(totalDist / WAYPOINT_SEGMENT_DISTANCE) + 1;
+
+        for (uint32 i = 1; i <= numSegments; ++i)
+        {
+            float t = static_cast<float>(i) / numSegments;
+            float wpX = startX + dx * t;
+            float wpY = startY + dy * t;
+            float wpZ;
+
+            // Get terrain height at this point
+            if (Map* map = pBot->GetMap())
+            {
+                wpZ = map->GetHeight(wpX, wpY, MAX_HEIGHT);
+                if (wpZ <= INVALID_HEIGHT)
+                    wpZ = startZ + (m_targetZ - startZ) * t;  // Fallback to interpolation
+            }
+            else
+            {
+                wpZ = startZ + (m_targetZ - startZ) * t;
+            }
+
+            m_waypoints.push_back(Vector3(wpX, wpY, wpZ));
+        }
+
+        // Ensure final waypoint is exact destination
+        if (!m_waypoints.empty())
+            m_waypoints.back() = Vector3(m_targetX, m_targetY, m_targetZ);
+    }
+
+    m_waypointsGenerated = true;
+
+    sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+        "[TravelingStrategy] %s: Generated %zu waypoints for %.0f yard journey",
+        pBot->GetName(), m_waypoints.size(), totalDist);
+}
+
+void TravelingStrategy::MoveToCurrentWaypoint(Player* pBot)
+{
+    if (!pBot || m_currentWaypoint >= m_waypoints.size())
+        return;
+
+    Vector3 const& wp = m_waypoints[m_currentWaypoint];
+
+    pBot->GetMotionMaster()->MovePoint(
+        m_currentWaypoint,  // Use waypoint index as movement ID
+        wp.x, wp.y, wp.z,
+        MOVE_PATHFINDING | MOVE_RUN_MODE | MOVE_EXCLUDE_STEEP_SLOPES);
+
+    sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+        "[TravelingStrategy] %s: Moving to waypoint %u/%zu (%.1f, %.1f, %.1f)",
+        pBot->GetName(), m_currentWaypoint + 1,
+        m_waypoints.size(), wp.x, wp.y, wp.z);
+}
+
+void TravelingStrategy::OnWaypointReached(Player* pBot, uint32 waypointId)
+{
+    if (m_state != TravelState::WALKING || !m_waypointsGenerated)
+        return;
+
+    // Verify this is the waypoint we expected
+    if (waypointId != m_currentWaypoint)
+        return;
+
+    m_currentWaypoint++;
+
+    if (m_currentWaypoint >= m_waypoints.size())
+    {
+        // All waypoints reached - will be handled by IsAtDestination check
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+            "[TravelingStrategy] All waypoints reached, checking destination");
+        return;
+    }
+
+    // Move to next waypoint immediately for smooth movement
+    MoveToCurrentWaypoint(pBot);
 }

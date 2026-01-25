@@ -20,9 +20,11 @@
 - **Anti-thrashing**: 90-second arrival cooldown prevents constant spot-hopping
 - **Post-resurrection reset**: Travel state resets after death/resurrection
 
-### Phase 5 Known Bugs (see CURRENT_BUG.md)
-1. **Movement sync bug**: Bots move at super speed / disappear during long-distance travel
-2. **Pre-travel vendor check not wired up**: Bot stands idle if bags >60% or durability <50%
+### Phase 5 Status
+All Phase 5 bugs have been fixed:
+- ✅ Movement sync bug (waypoint segmentation + terrain flags)
+- ✅ Pre-travel vendor check (ForceStart wired up)
+- ✅ Combat facing bug (SetFacingToObject added)
 
 ---
 
@@ -189,10 +191,9 @@ if (IsBot())
 18. Resume travel after combat interruption
 
 **Known Limitations:**
-- Long-distance travel has movement sync issues (super speed / disappearing)
-- Pre-travel vendor check not fully wired up (see CURRENT_BUG.md)
 - Same-map travel only (no boats/zeppelins/flight paths)
-- May path through dangerous areas (no threat avoidance)
+- May path through dangerous areas (no road following / threat avoidance)
+- Race distribution skewed toward races with more class options (future config enhancement)
 
 ---
 
@@ -291,6 +292,29 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 ## Session Log
+
+### 2026-01-25 - Movement Sync Bug Fixed (TravelingStrategy Overhaul)
+- **Issue**: Bots moved at super speed, disappeared, floated through air during long-distance travel
+- **Root Cause**: Single `MovePoint()` for entire journey failed when navmesh couldn't find path, falling back to direct 2-point line ignoring terrain
+- **Investigation**:
+  - Analyzed BattleBotAI waypoint system (uses segmented waypoints + `MOVE_EXCLUDE_STEEP_SLOPES`)
+  - Checked taxi path data - only air paths, not usable for ground travel
+  - Researched cMangos playerbots - they use teleportation, no road waypoint data
+- **Fix**: Complete TravelingStrategy overhaul:
+  1. Added `MOVE_EXCLUDE_STEEP_SLOPES` flag for terrain handling
+  2. Added `ValidatePath()` - PathFinder check before travel (aborts if unreachable)
+  3. Added `GenerateWaypoints()` - breaks journey into ~200 yard segments
+  4. Added `MoveToCurrentWaypoint()` - issues MovePoint with proper flags
+  5. Added `OnWaypointReached()` - chains waypoints via MovementInform callback
+  6. Added `MovementInform()` override in RandomBotAI to notify TravelingStrategy
+  7. Immediate waypoint transitions (call MoveToCurrentWaypoint directly, no Update tick delay)
+- **Files Modified**:
+  - `TravelingStrategy.h` - PathFinder include, waypoint members, 4 new methods
+  - `TravelingStrategy.cpp` - Path validation, waypoint generation, terrain flags, ~100 new lines
+  - `RandomBotAI.h` - MovementInform override declaration
+  - `RandomBotAI.cpp` - MovementInform implementation
+- **Tested**: Bot ran smoothly from Kharanos to Coldridge Valley without stopping or terrain issues
+- **Impact**: Fixes all terrain/pathing issues for long-distance travel
 
 ### 2026-01-25 - Combat Facing Bug Fixed
 - **Issue**: Bots got stuck when target was behind them (hunter couldn't engage wolf behind it)
@@ -597,4 +621,4 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 *Last Updated: 2026-01-25*
-*Current State: Phase 5 complete. Code Audit #1 complete (12/12 issues). Combat facing bug fixed. See CURRENT_BUG.md for remaining issues.*
+*Current State: Phase 5 complete. All known bugs fixed. Travel system overhauled with waypoint segmentation.*

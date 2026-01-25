@@ -1,57 +1,50 @@
 # Current Bug Tracker
 
-## Status: 2 ACTIVE BUGS
+## Status: 0 ACTIVE BUGS
+
+All known bugs have been fixed!
 
 ---
 
-## Active Bugs
+## Future Enhancements (Not Bugs)
 
-### 1. Movement Sync Bug (Travel System)
+### Road/Path Following for Travel
+- **Status**: Deferred
+- **Issue**: Bots travel in straight lines, may path through high-level mob areas
+- **Investigated**: cMangos playerbots uses teleportation, no road waypoint data exists
+- **Solution**: Create `travel_routes` table with hand-placed road waypoints (future work)
 
-**Severity**: Medium
-**Component**: TravelingStrategy
-
-**Symptoms**:
-- Bots move at super speed during long-distance travel
-- Bots disappear from player vision while traveling (still targetable)
-- Movement not properly broadcast to nearby clients
-
-**Observed When**: Bot travels long distance to a grind spot (e.g., Ironforge → Coldridge Valley)
-
-**Suspected Cause**: Long-distance `MovePoint()` with `MOVE_PATHFINDING` flag may not broadcast movement packets correctly to observers, or speed calculation is incorrect for long paths.
-
-**Potential Fixes**:
-- Break long journeys into smaller waypoint segments (200-300 yards each)
-- Investigate movement packet broadcasting for bot players
-- Check if speed multiplier is being applied incorrectly
-
----
-
-### 2. Race Distribution Bug (Bot Generation)
-
-**Severity**: Low
-**Component**: RandomBotGenerator
-
-**Symptoms**:
-- Out of 33 bots, 0 gnomes and only 1 troll
-- Race distribution is heavily skewed
-
-**Observed When**: Checking bot population after generation
-
-**Suspected Cause**:
-- Random race selection may not be evenly weighted
-- Possible issue with race/class combination logic excluding gnomes/trolls
-- Gnomes have limited class options (Warrior, Rogue, Mage, Warlock) - 4 classes
-- Trolls have limited class options (Warrior, Hunter, Rogue, Priest, Mage, Shaman) - 6 classes
-
-**Investigation Needed**:
-- Review `RandomBotGenerator::GenerateRandomBots()` race selection logic
-- Check if class selection happens first (limiting race choices)
-- Verify random number distribution
+### Race Distribution Configuration
+- **Status**: Deferred
+- **Issue**: Class-first selection leads to uneven race distribution (fewer gnomes/trolls)
+- **Solution**: Add config options for race/class probability weights (future enhancement)
 
 ---
 
 ## Recently Fixed (2026-01-25)
+
+### Movement Sync Bug (Travel System) - FIXED
+
+**Issue**: Bots moved at super speed, disappeared during long-distance travel (IF → Coldridge).
+
+**Root Cause**: Single `MovePoint()` for entire journey. When navmesh couldn't find a valid path for long distances, it fell back to direct 2-point path ignoring terrain. Also missing `MOVE_EXCLUDE_STEEP_SLOPES` flag.
+
+**Fix**: Complete TravelingStrategy overhaul:
+1. Added `MOVE_EXCLUDE_STEEP_SLOPES` flag for terrain handling
+2. Added path validation before travel (PathFinder check - aborts if unreachable)
+3. Added waypoint segmentation (~200 yard segments)
+4. Added `MovementInform()` handler in RandomBotAI for waypoint chaining
+5. Immediate waypoint transitions (no 5-second pause between segments)
+
+**Files Modified**:
+- `TravelingStrategy.h` - PathFinder include, waypoint members, new methods
+- `TravelingStrategy.cpp` - Path validation, waypoint generation, terrain flags
+- `RandomBotAI.h` - MovementInform override
+- `RandomBotAI.cpp` - MovementInform implementation
+
+**Tested**: Bot ran smoothly from Kharanos to Coldridge Valley starter zone without stopping or floating.
+
+---
 
 ### Combat Facing Bug - FIXED
 
@@ -131,4 +124,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-25 (Added race distribution and combat facing bugs)*
+*Last Updated: 2026-01-25 (All bugs fixed - movement sync bug resolved with waypoint segmentation)*

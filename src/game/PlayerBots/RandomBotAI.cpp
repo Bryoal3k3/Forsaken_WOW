@@ -66,6 +66,16 @@ void RandomBotAI::OnPlayerLogin()
     // This ensures the player is fully loaded from DB before we modify state
 }
 
+void RandomBotAI::MovementInform(uint32 movementType, uint32 data)
+{
+    // Handle waypoint completion for TravelingStrategy
+    // Move to next waypoint immediately (not on next Update tick) for smooth movement
+    if (movementType == POINT_MOTION_TYPE && m_travelingStrategy)
+    {
+        m_travelingStrategy->OnWaypointReached(me, data);
+    }
+}
+
 void RandomBotAI::UpdateAI(uint32 const diff)
 {
     // Throttle updates

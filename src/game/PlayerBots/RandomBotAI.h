@@ -32,6 +32,7 @@ public:
     bool OnSessionLoaded(PlayerBotEntry* entry, WorldSession* sess) override;
     void OnPlayerLogin() override;
     void UpdateAI(uint32 const diff) override;
+    void MovementInform(uint32 movementType, uint32 data) override;
 
     // Combat AI - required by CombatBotBaseAI
     void UpdateInCombatAI() override;

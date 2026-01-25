@@ -292,6 +292,16 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2026-01-25 - Combat Facing Bug Fixed
+- **Issue**: Bots got stuck when target was behind them (hunter couldn't engage wolf behind it)
+- **Root Cause**: `Engage()` and `UpdateCombat()` didn't ensure bot faced target. `MoveChase()` doesn't handle facing when already in range.
+- **Fix**: Added facing logic in two places:
+  1. `CombatHelpers.h` - `SetFacingToObject(pTarget)` before `Attack()` in both `EngageMelee()` and `EngageCaster()`
+  2. `BotCombatMgr.cpp` - Facing check in `UpdateCombat()` using BattleBotAI pattern (`HasInArc()` + `SetInFront()` + `SendMovementPacket()`)
+- **Files Modified**: `Combat/CombatHelpers.h`, `Combat/BotCombatMgr.cpp`
+- **Tested**: Bot now "snaps" to face target before attacking
+- **Impact**: +9 lines, fixes stuck combat for all classes
+
 ### 2026-01-24 - Code Audit Issue #8 Fixed
 - **Issue**: Dead code - `GetNextFreeCharacterGuid()` method never called
 - **Fix**: Removed method from RandomBotGenerator.cpp and declaration from .h
@@ -586,5 +596,5 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ---
 
-*Last Updated: 2026-01-24*
-*Current State: Phase 5 complete. Code Audit #1 complete (12/12 issues). Travel system has 1 known bug remaining - see CURRENT_BUG.md.*
+*Last Updated: 2026-01-25*
+*Current State: Phase 5 complete. Code Audit #1 complete (12/12 issues). Combat facing bug fixed. See CURRENT_BUG.md for remaining issues.*

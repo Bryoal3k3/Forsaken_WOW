@@ -21,6 +21,9 @@ namespace CombatHelpers
     // Used by: Mage, Priest, Warlock
     inline bool EngageCaster(Player* pBot, Unit* pTarget, const char* className)
     {
+        // Face target before attacking (fixes stuck bug when target is behind)
+        pBot->SetFacingToObject(pTarget);
+
         // Use Attack(false) to establish combat state without melee swings
         // This sets GetVictim() and adds us to mob's attacker list
         // First spell in UpdateCombat() will deal damage and fully engage
@@ -43,6 +46,9 @@ namespace CombatHelpers
     // Used by: Warrior, Rogue, Paladin, Shaman, Druid
     inline bool EngageMelee(Player* pBot, Unit* pTarget, const char* className)
     {
+        // Face target before attacking (fixes stuck bug when target is behind)
+        pBot->SetFacingToObject(pTarget);
+
         // Melee classes use Attack(true) to enable auto-attack swings
         if (pBot->Attack(pTarget, true))
         {

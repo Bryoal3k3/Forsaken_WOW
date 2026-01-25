@@ -67,6 +67,14 @@ bool BotCombatMgr::Engage(Player* pBot, Unit* pTarget)
 
 void BotCombatMgr::UpdateCombat(Player* pBot, Unit* pVictim)
 {
+    // Ensure bot is facing target when not moving (fixes stuck combat)
+    // Pattern from BattleBotAI - check 120 degree arc (2*PI/3)
+    if (pVictim && !pBot->HasInArc(pVictim, 2 * M_PI_F / 3) && !pBot->IsMoving())
+    {
+        pBot->SetInFront(pVictim);
+        pBot->SendMovementPacket(MSG_MOVE_SET_FACING, false);
+    }
+
     if (m_handler)
         m_handler->UpdateCombat(pBot, pVictim);
 }

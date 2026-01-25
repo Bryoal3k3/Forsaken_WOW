@@ -1,6 +1,6 @@
 # Current Bug Tracker
 
-## Status: 1 ACTIVE BUG
+## Status: 2 ACTIVE BUGS
 
 ---
 
@@ -24,6 +24,50 @@
 - Break long journeys into smaller waypoint segments (200-300 yards each)
 - Investigate movement packet broadcasting for bot players
 - Check if speed multiplier is being applied incorrectly
+
+---
+
+### 2. Race Distribution Bug (Bot Generation)
+
+**Severity**: Low
+**Component**: RandomBotGenerator
+
+**Symptoms**:
+- Out of 33 bots, 0 gnomes and only 1 troll
+- Race distribution is heavily skewed
+
+**Observed When**: Checking bot population after generation
+
+**Suspected Cause**:
+- Random race selection may not be evenly weighted
+- Possible issue with race/class combination logic excluding gnomes/trolls
+- Gnomes have limited class options (Warrior, Rogue, Mage, Warlock) - 4 classes
+- Trolls have limited class options (Warrior, Hunter, Rogue, Priest, Mage, Shaman) - 6 classes
+
+**Investigation Needed**:
+- Review `RandomBotGenerator::GenerateRandomBots()` race selection logic
+- Check if class selection happens first (limiting race choices)
+- Verify random number distribution
+
+---
+
+## Recently Fixed (2026-01-25)
+
+### Combat Facing Bug - FIXED
+
+**Issue**: Bot gets stuck when target is behind it. Hunter observed unable to engage wolf behind it.
+
+**Root Cause**: Neither `Engage()` nor `UpdateCombat()` ensured bot was facing target. `MoveChase()` handles movement but not facing when already in range.
+
+**Fix**: Added facing logic in two places:
+1. `CombatHelpers.h` - Added `SetFacingToObject(pTarget)` to `EngageMelee()` and `EngageCaster()` before `Attack()` call
+2. `BotCombatMgr.cpp` - Added facing check in `UpdateCombat()` using BattleBotAI pattern: check `HasInArc()`, then `SetInFront()` + `SendMovementPacket()`
+
+**Files Modified**:
+- `Combat/CombatHelpers.h` - Added facing on engagement
+- `Combat/BotCombatMgr.cpp` - Added mid-combat facing check
+
+**Tested**: Bot now "snaps" to face target before attacking. Hunter Auto Shot works correctly when target is behind.
 
 ---
 
@@ -87,4 +131,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-24 (Pre-travel vendor bug fixed)*
+*Last Updated: 2026-01-25 (Added race distribution and combat facing bugs)*

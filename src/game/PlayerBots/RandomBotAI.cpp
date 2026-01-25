@@ -41,6 +41,10 @@ RandomBotAI::RandomBotAI()
     , m_combatMgr(std::make_unique<BotCombatMgr>())
 {
     m_updateTimer.Reset(1000);
+
+    // Wire up cross-strategy references
+    if (m_travelingStrategy && m_vendoringStrategy)
+        m_travelingStrategy->SetVendoringStrategy(m_vendoringStrategy.get());
 }
 
 RandomBotAI::~RandomBotAI() = default;

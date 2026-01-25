@@ -292,6 +292,19 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2026-01-24 - Code Audit Issue #6 Fixed
+- **Issue**: Pre-travel vendor threshold mismatch (bots stuck when bags >60% or durability <50%)
+- **Fix**: Wired up VendoringStrategy::ForceStart() from TravelingStrategy
+  - Added `SetVendoringStrategy()` setter and `m_pVendoringStrategy` member to TravelingStrategy
+  - RandomBotAI constructor now wires up the cross-strategy reference
+  - TravelingStrategy calls `ForceStart()` when yielding for pre-travel vendor check
+- **Files Modified**:
+  - `TravelingStrategy.h` - Added setter and member
+  - `TravelingStrategy.cpp` - Call ForceStart() before yielding
+  - `RandomBotAI.cpp` - Wire up vendoring strategy in constructor
+- **Tested**: Bot with full bags correctly vendors before traveling to new grind spot
+- **Impact**: Fixes bug where bots would stand idle at intermediate bag/durability thresholds
+
 ### 2026-01-24 - Code Audit Issue #5 Fixed
 - **Issue**: Debug PathFinder in production (unnecessary path calculation every vendor trip)
 - **Fix**: Removed 28-line debug block and unused `PathFinder.h` include
@@ -540,4 +553,4 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 *Last Updated: 2026-01-24*
-*Current State: Phase 5 complete. Code audit in progress (5/12 issues fixed, all Critical+High done). Travel system has 2 known bugs - see CURRENT_BUG.md.*
+*Current State: Phase 5 complete. Code audit in progress (6/12 issues fixed). Travel system has 1 known bug remaining - see CURRENT_BUG.md.*

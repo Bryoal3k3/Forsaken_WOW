@@ -16,6 +16,7 @@
 #include <mutex>
 
 class Player;
+class VendoringStrategy;
 
 // Cached grind spot data (loaded once at startup)
 struct GrindSpotData
@@ -69,7 +70,13 @@ public:
     // Cache management (called once at startup from PlayerBotMgr::Load)
     static void BuildGrindSpotCache();
 
+    // Set vendoring strategy reference (for pre-travel vendor trigger)
+    void SetVendoringStrategy(VendoringStrategy* pVendoring) { m_pVendoringStrategy = pVendoring; }
+
 private:
+    // Vendoring strategy reference (for pre-travel vendor trigger)
+    VendoringStrategy* m_pVendoringStrategy = nullptr;
+
     // Static cache (shared across all bot instances)
     static std::vector<GrindSpotData> s_grindSpotCache;
     static bool s_cacheBuilt;

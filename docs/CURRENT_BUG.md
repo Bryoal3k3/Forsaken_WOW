@@ -1,6 +1,6 @@
 # Current Bug Tracker
 
-## Status: 2 ACTIVE BUGS
+## Status: 1 ACTIVE BUG
 
 ---
 
@@ -27,29 +27,21 @@
 
 ---
 
-### 2. Pre-Travel Vendor Check Not Wired Up
+## Recently Fixed (2026-01-24)
 
-**Severity**: Medium (causes bot to become stuck)
-**Component**: TravelingStrategy / VendoringStrategy coordination
+### Pre-Travel Vendor Check - FIXED
 
-**Symptoms**:
-- Bot with >60% full bags or <50% durability stands idle instead of vendoring before travel
-- TravelingStrategy yields expecting VendoringStrategy to handle it
-- VendoringStrategy only triggers at 100% full bags / 0% durability
-- Bot just stands there doing nothing - completely stuck
-- **Additional observation**: After killing the bot and it resurrecting (resurrection worked flawlessly), the bot still just stood there again - confirming the issue persists across death/resurrection
+**Issue**: Bot with >60% full bags or <50% durability stood idle instead of vendoring before travel.
 
-**Root Cause**: Threshold mismatch between strategies:
-- TravelingStrategy yields at: bags >60% OR durability <50%
-- VendoringStrategy triggers at: bags 100% full OR gear completely broken
+**Root Cause**: Threshold mismatch - TravelingStrategy yielded at 60%/50%, but VendoringStrategy only triggered at 100%/0%.
 
-**Current State**: `VendoringStrategy::ForceStart()` method added but not wired up to TravelingStrategy.
+**Fix**: Wired up `VendoringStrategy::ForceStart()` from TravelingStrategy. Added `SetVendoringStrategy()` setter, called in RandomBotAI constructor. Now TravelingStrategy calls `ForceStart()` when yielding for pre-travel vendor check.
 
-**Fix Required**: TravelingStrategy needs access to VendoringStrategy to call `ForceStart()` when pre-travel vendor conditions are met.
+**Tested**: Bot with full bags correctly vendors before traveling to new grind spot.
 
 ---
 
-## Recently Fixed (2026-01-24)
+## Recently Fixed (2026-01-24 - Earlier)
 
 ### Tree/Doodad Collision - FIXED
 
@@ -95,4 +87,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-24 (Phase 5 Travel System bugs added)*
+*Last Updated: 2026-01-24 (Pre-travel vendor bug fixed)*

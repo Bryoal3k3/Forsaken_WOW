@@ -2,7 +2,7 @@
 
 **Audit Date:** 2026-01-24
 **Target Scale:** 100 - 3000 concurrent bots
-**Status:** 5/12 issues resolved
+**Status:** 6/12 issues resolved
 
 ---
 
@@ -145,7 +145,7 @@ std::list<Creature*> creatures;
 
 ## Medium Priority (Bugs / Safety)
 
-### [ ] 6. Pre-Travel Vendor Threshold Mismatch
+### [x] 6. Pre-Travel Vendor Threshold Mismatch ✅ FIXED
 **File:** `src/game/PlayerBots/Strategies/TravelingStrategy.cpp:48-49`
 **Impact:** Bots get stuck when bags >60% or durability <50%
 **Tracked In:** `docs/CURRENT_BUG.md`
@@ -169,9 +169,9 @@ return AreBagsFull(pBot) || IsGearBroken(pBot);  // 100% or 0%
 | C | Add configurable thresholds to both strategies |
 
 **Recommended:** Option A
-**Assigned To:**
-**PR Link:**
-**Review Notes:**
+**Assigned To:** Claude
+**PR Link:** (pending commit)
+**Review Notes:** Implemented Option A. Added SetVendoringStrategy() to TravelingStrategy, wired up in RandomBotAI constructor. TravelingStrategy now calls ForceStart() when yielding for pre-travel vendor check. Tested and verified working.
 
 ---
 
@@ -321,9 +321,9 @@ m_generatedNames.push_back(name);  // Grows forever
 |----------|-------|------|-----------|
 | Critical | 3 | 3 | 0 |
 | High | 2 | 2 | 0 |
-| Medium | 2 | 0 | 2 |
+| Medium | 2 | 1 | 1 |
 | Low | 5 | 0 | 5 |
-| **Total** | **12** | **5** | **7** |
+| **Total** | **12** | **6** | **6** |
 
 ---
 

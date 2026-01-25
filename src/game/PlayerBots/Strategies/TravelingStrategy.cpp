@@ -101,15 +101,19 @@ bool TravelingStrategy::Update(Player* pBot, uint32 /*diff*/)
             if (!ShouldTravel(pBot))
                 return false;
 
-            // Check if we should vendor first - if so, YIELD entirely
-            // Let VendoringStrategy handle it on next tick
+            // Check if we should vendor first - if so, trigger vendoring and yield
             if (VendoringStrategy::GetLowestDurabilityPercent(pBot) < DURABILITY_THRESHOLD ||
                 VendoringStrategy::GetBagFullPercent(pBot) > BAG_FULL_THRESHOLD)
             {
                 sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
-                    "[TravelingStrategy] %s needs vendor before travel, yielding",
+                    "[TravelingStrategy] %s needs vendor before travel, triggering vendoring",
                     pBot->GetName());
-                return false;  // Yield - vendoring will trigger naturally
+
+                // Force vendoring to start (it won't trigger naturally at these thresholds)
+                if (m_pVendoringStrategy)
+                    m_pVendoringStrategy->ForceStart();
+
+                return false;  // Yield - vendoring will handle it
             }
 
             m_state = TravelState::FINDING_SPOT;

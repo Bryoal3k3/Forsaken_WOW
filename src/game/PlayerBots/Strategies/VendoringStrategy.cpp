@@ -19,7 +19,6 @@
 #include "SharedDefines.h"
 #include "Map.h"
 #include "ProgressBar.h"
-#include "PathFinder.h"
 #include <cmath>
 #include <cfloat>
 
@@ -464,35 +463,6 @@ bool VendoringStrategy::Update(Player* pBot, uint32 diff)
                          pBot->GetName());
                 Reset();
                 return false;
-            }
-
-            // Debug: Check what PathFinder would compute for this path
-            {
-                PathFinder pathDebug(pBot);
-                pathDebug.calculate(m_targetVendor.x, m_targetVendor.y, m_targetVendor.z, false);
-                PathType pathType = pathDebug.getPathType();
-                size_t waypointCount = pathDebug.getPath().size();
-
-                const char* pathTypeStr = "UNKNOWN";
-                if (pathType & PATHFIND_SHORTCUT) pathTypeStr = "SHORTCUT (no navmesh!)";
-                else if (pathType & PATHFIND_NORMAL) pathTypeStr = "NORMAL";
-                else if (pathType & PATHFIND_INCOMPLETE) pathTypeStr = "INCOMPLETE";
-                else if (pathType & PATHFIND_NOPATH) pathTypeStr = "NOPATH";
-
-                sLog.Out(LOG_BASIC, LOG_LVL_BASIC, "[VendoringStrategy] PATH DEBUG for %s: type=%s (0x%x), waypoints=%zu, distance=%.1f",
-                         pBot->GetName(), pathTypeStr, (uint32)pathType, waypointCount,
-                         pBot->GetDistance(m_targetVendor.x, m_targetVendor.y, m_targetVendor.z));
-
-                // Log each waypoint if it's a real path
-                if (waypointCount > 2 && !(pathType & PATHFIND_SHORTCUT))
-                {
-                    const auto& path = pathDebug.getPath();
-                    for (size_t i = 0; i < path.size(); ++i)
-                    {
-                        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[VendoringStrategy]   Waypoint %zu: (%.1f, %.1f, %.1f)",
-                                 i, path[i].x, path[i].y, path[i].z);
-                    }
-                }
             }
 
             // Start walking to vendor (with pathfinding for collision avoidance)

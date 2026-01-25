@@ -2,13 +2,13 @@
 
 **Audit Date:** 2026-01-24
 **Target Scale:** 100 - 3000 concurrent bots
-**Status:** 3/12 issues resolved
+**Status:** 5/12 issues resolved
 
 ---
 
 ## Critical Priority (Performance Blockers)
 
-### [ ] 1. Database Query in Hot Path
+### [x] 1. Database Query in Hot Path ✅ FIXED
 **File:** `src/game/PlayerBots/Strategies/TravelingStrategy.cpp:199-231`
 **Impact:** 300+ DB queries/second at scale
 
@@ -27,9 +27,9 @@ std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery(
 | C | Pre-compute per-race/level at startup | Instant lookup | More complex initialization |
 
 **Recommended:** Option A
-**Assigned To:**
-**PR Link:**
-**Review Notes:**
+**Assigned To:** Claude
+**PR Link:** (pending commit)
+**Review Notes:** Implemented Option A. Added static cache with `GrindSpotData` struct, `BuildGrindSpotCache()` loads all spots at startup, `FindGrindSpot()` searches in-memory. Same pattern as VendoringStrategy. Thread safety note: mutex only used during build (same as vendor cache) - will address both in Issue #7.
 
 ---
 
@@ -56,7 +56,7 @@ Cell::VisitGridObjects(pBot, searcher, range);  // EXPENSIVE
 
 **Recommended:** Option A + B combined
 **Assigned To:** Claude
-**PR Link:** (pending commit)
+**PR Link:** Commit 0de100df3
 **Review Notes:** Implemented A + B. Tiered search (50yd → 150yd). Exponential backoff (1s → 2s → 4s → 8s max). Resets on target found or combat end. ~44% reduction in searches at scale.
 
 ---
@@ -110,12 +110,12 @@ std::list<Creature*> creatures;
 **Recommended:** Option A
 **Also Apply To:** `LootingBehavior.cpp:131` (same issue - not yet fixed)
 **Assigned To:** Claude
-**PR Link:** (pending commit)
+**PR Link:** Commit 0de100df3
 **Review Notes:** Went beyond recommended fix - eliminated list entirely by using `CreatureLastSearcher` with a stateful `NearestGrindTarget` checker that finds closest valid target in single pass. Zero container allocations.
 
 ---
 
-### [ ] 5. Debug PathFinder in Production
+### [x] 5. Debug PathFinder in Production ✅ FIXED
 **File:** `src/game/PlayerBots/Strategies/VendoringStrategy.cpp:469-496`
 **Impact:** Unnecessary path calculation every vendor trip
 
@@ -137,9 +137,9 @@ std::list<Creature*> creatures;
 | C | Gate behind runtime config flag |
 
 **Recommended:** Option B (issue it was debugging is resolved)
-**Assigned To:**
-**PR Link:**
-**Review Notes:**
+**Assigned To:** Claude
+**PR Link:** (pending commit)
+**Review Notes:** Removed 28-line debug block and unused PathFinder.h include. Tree collision issue was fixed by re-extracting vmaps/mmaps from clean client.
 
 ---
 
@@ -319,11 +319,11 @@ m_generatedNames.push_back(name);  // Grows forever
 
 | Priority | Total | Done | Remaining |
 |----------|-------|------|-----------|
-| Critical | 3 | 2 | 1 |
-| High | 2 | 1 | 1 |
+| Critical | 3 | 3 | 0 |
+| High | 2 | 2 | 0 |
 | Medium | 2 | 0 | 2 |
 | Low | 5 | 0 | 5 |
-| **Total** | **12** | **3** | **9** |
+| **Total** | **12** | **5** | **7** |
 
 ---
 

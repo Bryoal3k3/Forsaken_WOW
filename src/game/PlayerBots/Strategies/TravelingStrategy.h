@@ -12,8 +12,23 @@
 
 #include "IBotStrategy.h"
 #include <string>
+#include <vector>
+#include <mutex>
 
 class Player;
+
+// Cached grind spot data (loaded once at startup)
+struct GrindSpotData
+{
+    uint32 id;
+    uint32 mapId;
+    float x, y, z;
+    uint8 minLevel;
+    uint8 maxLevel;
+    uint8 faction;      // 0=both, 1=alliance, 2=horde
+    uint8 priority;
+    std::string name;
+};
 
 namespace TravelConstants
 {
@@ -51,7 +66,15 @@ public:
     // Check if currently traveling
     bool IsTraveling() const;
 
+    // Cache management (called once at startup from PlayerBotMgr::Load)
+    static void BuildGrindSpotCache();
+
 private:
+    // Static cache (shared across all bot instances)
+    static std::vector<GrindSpotData> s_grindSpotCache;
+    static bool s_cacheBuilt;
+    static std::mutex s_cacheMutex;
+
     enum class TravelState
     {
         IDLE,           // Not traveling, checking if needed

@@ -14,9 +14,16 @@
 #include "Log.h"
 #include "World.h"
 #include "Database/DatabaseEnv.h"
+#include "ProgressBar.h"
 #include <cmath>
+#include <cfloat>
 
 using namespace TravelConstants;
+
+// Static member initialization
+std::vector<GrindSpotData> TravelingStrategy::s_grindSpotCache;
+bool TravelingStrategy::s_cacheBuilt = false;
+std::mutex TravelingStrategy::s_cacheMutex;
 
 TravelingStrategy::TravelingStrategy()
     : m_state(TravelState::IDLE)
@@ -29,6 +36,57 @@ TravelingStrategy::TravelingStrategy()
     , m_lastY(0.0f)
     , m_lastProgressTime(0)
 {
+}
+
+void TravelingStrategy::BuildGrindSpotCache()
+{
+    std::lock_guard<std::mutex> lock(s_cacheMutex);
+
+    if (s_cacheBuilt)
+        return;
+
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[TravelingStrategy] Building grind spot cache...");
+
+    // Query all grind spots from database
+    std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery(
+        "SELECT id, map_id, x, y, z, min_level, max_level, faction, priority, name "
+        "FROM grind_spots ORDER BY priority DESC"));
+
+    if (!result)
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Grind spot cache: 0 spots loaded (table empty or missing)");
+        s_cacheBuilt = true;
+        return;
+    }
+
+    // Count rows for progress bar
+    uint32 rowCount = result->GetRowCount();
+    BarGoLink bar(rowCount);
+
+    do
+    {
+        bar.step();
+        Field* fields = result->Fetch();
+
+        GrindSpotData spot;
+        spot.id       = fields[0].GetUInt32();
+        spot.mapId    = fields[1].GetUInt32();
+        spot.x        = fields[2].GetFloat();
+        spot.y        = fields[3].GetFloat();
+        spot.z        = fields[4].GetFloat();
+        spot.minLevel = fields[5].GetUInt8();
+        spot.maxLevel = fields[6].GetUInt8();
+        spot.faction  = fields[7].GetUInt8();
+        spot.priority = fields[8].GetUInt8();
+        spot.name     = fields[9].GetCppString();
+
+        s_grindSpotCache.push_back(spot);
+    }
+    while (result->NextRow());
+
+    s_cacheBuilt = true;
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Grind spot cache built: %u spots loaded",
+             static_cast<uint32>(s_grindSpotCache.size()));
 }
 
 bool TravelingStrategy::Update(Player* pBot, uint32 /*diff*/)
@@ -187,6 +245,10 @@ bool TravelingStrategy::FindGrindSpot(Player* pBot)
     if (!pBot)
         return false;
 
+    // Ensure cache is built (fallback - should already be built at startup)
+    if (!s_cacheBuilt)
+        BuildGrindSpotCache();
+
     uint32 level = pBot->GetLevel();
     uint32 mapId = pBot->GetMapId();
     uint8 faction = GetBotFaction(pBot);
@@ -194,49 +256,47 @@ bool TravelingStrategy::FindGrindSpot(Player* pBot)
     float px = pBot->GetPositionX();
     float py = pBot->GetPositionY();
 
-    // Query with bounding box pre-filter for efficiency (5000 yard box)
-    // Priority first, then distance as tiebreaker
-    std::unique_ptr<QueryResult> result(CharacterDatabase.PQuery(
-        "SELECT x, y, z, name FROM grind_spots "
-        "WHERE map_id = %u "
-        "AND min_level <= %u AND max_level >= %u "
-        "AND (faction = 0 OR faction = %u) "
-        "AND x BETWEEN %f AND %f "
-        "AND y BETWEEN %f AND %f "
-        "ORDER BY priority DESC, POW(x - %f, 2) + POW(y - %f, 2) ASC "
-        "LIMIT 1",
-        mapId, level, level, faction,
-        px - 5000.0f, px + 5000.0f,
-        py - 5000.0f, py + 5000.0f,
-        px, py));
+    // Search cache for best matching spot
+    // Priority: highest priority first, then closest distance as tiebreaker
+    GrindSpotData const* bestSpot = nullptr;
+    float bestScore = FLT_MAX;  // Lower is better (we'll use -priority + normalized_distance)
 
-    if (result)
+    for (GrindSpotData const& spot : s_grindSpotCache)
     {
-        Field* fields = result->Fetch();
-        m_targetX = fields[0].GetFloat();
-        m_targetY = fields[1].GetFloat();
-        m_targetZ = fields[2].GetFloat();
-        m_targetName = fields[3].GetCppString();
-        return true;
+        // Filter: must be on same map
+        if (spot.mapId != mapId)
+            continue;
+
+        // Filter: level must be in range
+        if (level < spot.minLevel || level > spot.maxLevel)
+            continue;
+
+        // Filter: faction must match (0 = both factions)
+        if (spot.faction != 0 && spot.faction != faction)
+            continue;
+
+        // Calculate distance squared (avoid sqrt for comparison)
+        float dx = spot.x - px;
+        float dy = spot.y - py;
+        float distSq = dx * dx + dy * dy;
+
+        // Score: priority is primary (higher = better, so negate), distance is secondary
+        // Multiply priority by large factor to ensure it dominates
+        float score = -static_cast<float>(spot.priority) * 1000000.0f + distSq;
+
+        if (score < bestScore)
+        {
+            bestScore = score;
+            bestSpot = &spot;
+        }
     }
 
-    // No spot in bounding box, try without distance limit
-    result = CharacterDatabase.PQuery(
-        "SELECT x, y, z, name FROM grind_spots "
-        "WHERE map_id = %u "
-        "AND min_level <= %u AND max_level >= %u "
-        "AND (faction = 0 OR faction = %u) "
-        "ORDER BY priority DESC, POW(x - %f, 2) + POW(y - %f, 2) ASC "
-        "LIMIT 1",
-        mapId, level, level, faction, px, py);
-
-    if (result)
+    if (bestSpot)
     {
-        Field* fields = result->Fetch();
-        m_targetX = fields[0].GetFloat();
-        m_targetY = fields[1].GetFloat();
-        m_targetZ = fields[2].GetFloat();
-        m_targetName = fields[3].GetCppString();
+        m_targetX = bestSpot->x;
+        m_targetY = bestSpot->y;
+        m_targetZ = bestSpot->z;
+        m_targetName = bestSpot->name;
         return true;
     }
 

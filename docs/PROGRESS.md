@@ -292,6 +292,28 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2026-01-24 - Code Audit Issue #5 Fixed
+- **Issue**: Debug PathFinder in production (unnecessary path calculation every vendor trip)
+- **Fix**: Removed 28-line debug block and unused `PathFinder.h` include
+- **Context**: Debug code was added to investigate tree collision issue, which is now fixed
+- **Files Modified**: `VendoringStrategy.cpp`
+- **Impact**: Eliminates duplicate path calculation on every vendor trip
+
+### 2026-01-24 - Code Audit Issue #1 Fixed
+- **Issue**: Database query in TravelingStrategy hot path (300+ queries/sec at scale)
+- **Fix**: Cache grind spots at startup, search in-memory at runtime
+  - Added `GrindSpotData` struct to hold cached spot data
+  - Added static cache `s_grindSpotCache` with mutex (same pattern as VendoringStrategy)
+  - `BuildGrindSpotCache()` loads all spots from DB once at startup with progress bar
+  - `FindGrindSpot()` now searches in-memory array instead of executing SQL queries
+  - Called from `PlayerBotMgr::Load()` alongside vendor cache build
+- **Files Modified**:
+  - `TravelingStrategy.h` - Added GrindSpotData struct, static cache members, BuildGrindSpotCache()
+  - `TravelingStrategy.cpp` - Implemented cache build, replaced DB queries with in-memory search
+  - `PlayerBotMgr.cpp` - Added include and cache build call at startup
+- **Data Fix**: Corrected grind_spots level ranges (starter zones 1-5, not 1-6)
+- **Impact**: Zero runtime DB queries for travel destination selection
+
 ### 2026-01-24 - Code Audit Issue #2 Fixed
 - **Issue**: Grid search every tick (3000 searches/sec at scale)
 - **Fix**: Tiered radius search + exponential backoff
@@ -301,7 +323,7 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 - **Files Modified**:
   - `GrindingStrategy.h` - Added `m_skipTicks`, `m_backoffLevel`, tiered range constants
   - `GrindingStrategy.cpp` - Added cooldown check, tiered search, backoff logic
-- **Commit**: (pending)
+- **Commit**: 0de100df3
 - **Impact**: ~44% reduction in searches at scale, faster close-range detection
 
 ### 2026-01-24 - Code Audit Issue #4 Fixed
@@ -310,7 +332,7 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 - **Files Modified**:
   - `GrindingStrategy.h` - Made `IsValidGrindTarget()` public for checker access
   - `GrindingStrategy.cpp` - Replaced `AllCreaturesInRange` + list + loop with `NearestGrindTarget` + `CreatureLastSearcher`
-- **Commit**: (pending)
+- **Commit**: 0de100df3
 - **Impact**: Zero container allocations, eliminates second iteration pass
 - **Code reduction**: 27 lines → 17 lines for checker + FindGrindTarget
 
@@ -518,4 +540,4 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 *Last Updated: 2026-01-24*
-*Current State: Phase 5 complete. Code audit in progress (3/12 issues fixed). Travel system has 2 known bugs - see CURRENT_BUG.md.*
+*Current State: Phase 5 complete. Code audit in progress (5/12 issues fixed, all Critical+High done). Travel system has 2 known bugs - see CURRENT_BUG.md.*

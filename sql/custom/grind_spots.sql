@@ -31,7 +31,7 @@ CREATE INDEX idx_grind_map ON grind_spots(map_id);
 
 -- Northshire Valley (Human starting area)
 INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction, radius, priority, name) VALUES
-(0, 12, -8913, -136, 82, 1, 6, 1, 80.0, 70, 'Northshire Valley');
+(0, 12, -8913, -136, 82, 1, 5, 1, 80.0, 70, 'Northshire Valley');
 
 -- Elwynn Forest (Human 6-12)
 INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction, radius, priority, name) VALUES
@@ -39,7 +39,7 @@ INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction
 
 -- Coldridge Valley (Dwarf/Gnome starting area)
 INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction, radius, priority, name) VALUES
-(0, 1, -6240, 331, 383, 1, 6, 1, 80.0, 70, 'Coldridge Valley');
+(0, 1, -6240, 331, 383, 1, 5, 1, 80.0, 70, 'Coldridge Valley');
 
 -- Dun Morogh (Dwarf/Gnome 6-12)
 INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction, radius, priority, name) VALUES
@@ -47,7 +47,7 @@ INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction
 
 -- Shadowglen (Night Elf starting area)
 INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction, radius, priority, name) VALUES
-(1, 141, 10311, 832, 1326, 1, 6, 1, 80.0, 70, 'Shadowglen');
+(1, 141, 10311, 832, 1326, 1, 5, 1, 80.0, 70, 'Shadowglen');
 
 -- Teldrassil (Night Elf 6-12)
 INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction, radius, priority, name) VALUES
@@ -59,7 +59,7 @@ INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction
 
 -- Valley of Trials (Orc/Troll starting area)
 INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction, radius, priority, name) VALUES
-(1, 14, -618, -4251, 38, 1, 6, 2, 80.0, 70, 'Valley of Trials');
+(1, 14, -618, -4251, 38, 1, 5, 2, 80.0, 70, 'Valley of Trials');
 
 -- Durotar (Orc/Troll 6-12)
 INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction, radius, priority, name) VALUES
@@ -67,7 +67,7 @@ INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction
 
 -- Camp Narache (Tauren starting area)
 INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction, radius, priority, name) VALUES
-(1, 215, -2917, -257, 52, 1, 6, 2, 80.0, 70, 'Camp Narache');
+(1, 215, -2917, -257, 52, 1, 5, 2, 80.0, 70, 'Camp Narache');
 
 -- Mulgore (Tauren 6-12)
 INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction, radius, priority, name) VALUES
@@ -75,7 +75,7 @@ INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction
 
 -- Deathknell (Undead starting area)
 INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction, radius, priority, name) VALUES
-(0, 85, 1676, 1678, 121, 1, 6, 2, 80.0, 70, 'Deathknell');
+(0, 85, 1676, 1678, 121, 1, 5, 2, 80.0, 70, 'Deathknell');
 
 -- Tirisfal Glades (Undead 6-12)
 INSERT INTO grind_spots (map_id, zone_id, x, y, z, min_level, max_level, faction, radius, priority, name) VALUES

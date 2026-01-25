@@ -142,6 +142,8 @@ PlayerBotMgr::Load()
 PlayerBotMgr::Load()
 ├── Query characters.playerbot table
 ├── For each row: create PlayerBotEntry in m_bots map
+├── VendoringStrategy::BuildVendorCache()    // Cache all vendors
+├── TravelingStrategy::BuildGrindSpotCache() // Cache all grind spots
 ├── AddRandomBot() picks from m_bots, spawns MinBots immediately
 └── Periodic refresh adds/removes bots based on Min/Max settings
 

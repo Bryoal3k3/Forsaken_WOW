@@ -20,6 +20,7 @@
 #include "Spell.h"
 #include "RandomBotGenerator.h"
 #include "Strategies/VendoringStrategy.h"
+#include "Strategies/TravelingStrategy.h"
 
 INSTANTIATE_SINGLETON_1(PlayerBotMgr);
 
@@ -144,9 +145,12 @@ void PlayerBotMgr::Load()
     if (m_confMaxRandomBots <= m_confMinRandomBots)
         m_confMaxRandomBots = m_confMinRandomBots + 1;
 
-    // 5.5- Pre-build vendor cache so it's ready when bots need it
+    // 5.5- Pre-build caches so they're ready when bots need them
     if (m_confEnableRandomBots && !m_bots.empty())
+    {
         VendoringStrategy::BuildVendorCache();
+        TravelingStrategy::BuildGrindSpotCache();
+    }
 
     // 6- Start initial bots
     if (m_confEnableRandomBots)

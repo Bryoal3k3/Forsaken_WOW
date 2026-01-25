@@ -195,7 +195,7 @@ Resting → Not Resting
 Grinding → Traveling
 ├── GrindingStrategy returns NO_TARGETS
 ├── 5 consecutive NO_TARGETS ticks
-└── TravelingStrategy queries DB for new spot
+└── TravelingStrategy searches cached grind spots (loaded at startup)
 
 Traveling → Grinding
 ├── Arrived at destination (within 30 yards)
@@ -232,6 +232,28 @@ public:
 
 ---
 
+## Startup Initialization
+
+Before bots spawn, `PlayerBotMgr::Load()` builds static caches to avoid runtime DB queries:
+
+```
+PlayerBotMgr::Load()
+├── LoadConfig()
+├── PurgeAllRandomBots() (if RandomBot.Purge=1)
+├── GenerateIfNeeded() (creates bots on first launch)
+├── Load playerbot table into m_bots map
+├── VendoringStrategy::BuildVendorCache()    ← Caches all vendor NPCs
+├── TravelingStrategy::BuildGrindSpotCache() ← Caches all grind spots
+└── AddRandomBot() (spawns MinBots initially)
+```
+
+| Cache | Data Source | Used By |
+|-------|-------------|---------|
+| Vendor Cache | creature_template + creature | VendoringStrategy::FindNearestVendor() |
+| Grind Spot Cache | characters.grind_spots | TravelingStrategy::FindGrindSpot() |
+
+---
+
 ## Debugging Tips
 
 ### Log Output
@@ -252,4 +274,4 @@ Bot initialization and state changes are logged:
 
 ---
 
-*Last Updated: 2026-01-24*
+*Last Updated: 2026-01-24 (added startup cache documentation)*

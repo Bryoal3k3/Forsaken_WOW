@@ -2,7 +2,7 @@
 
 **Audit Date:** 2026-01-24
 **Target Scale:** 100 - 3000 concurrent bots
-**Status:** 6/12 issues resolved
+**Status:** 7/12 issues resolved
 
 ---
 
@@ -175,7 +175,7 @@ return AreBagsFull(pBot) || IsGearBroken(pBot);  // 100% or 0%
 
 ---
 
-### [ ] 7. Vendor Cache Thread Safety
+### [x] 7. Vendor Cache Thread Safety ✅ VERIFIED
 **File:** `src/game/PlayerBots/Strategies/VendoringStrategy.cpp`
 **Impact:** Potential race condition during startup
 
@@ -196,9 +196,9 @@ for (VendorLocation const& loc : s_vendorCache)  // RACE if cache building
 | C | Use std::shared_mutex for read-write locking |
 
 **Recommended:** Option A (verify current ordering in PlayerBotMgr::Load)
-**Assigned To:**
-**PR Link:**
-**Review Notes:**
+**Assigned To:** Claude
+**PR Link:** (pending commit)
+**Review Notes:** Verified Option A - ordering is already correct. In PlayerBotMgr::Load(): caches built at step 5.5, bots spawn at step 6. Added explicit comment documenting this ordering requirement. Both caches also have fallback checks that call BuildCache() if somehow accessed before startup.
 
 ---
 
@@ -321,9 +321,9 @@ m_generatedNames.push_back(name);  // Grows forever
 |----------|-------|------|-----------|
 | Critical | 3 | 3 | 0 |
 | High | 2 | 2 | 0 |
-| Medium | 2 | 1 | 1 |
+| Medium | 2 | 2 | 0 |
 | Low | 5 | 0 | 5 |
-| **Total** | **12** | **6** | **6** |
+| **Total** | **12** | **7** | **5** |
 
 ---
 

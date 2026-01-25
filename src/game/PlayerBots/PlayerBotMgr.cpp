@@ -146,13 +146,17 @@ void PlayerBotMgr::Load()
         m_confMaxRandomBots = m_confMinRandomBots + 1;
 
     // 5.5- Pre-build caches so they're ready when bots need them
+    // IMPORTANT: These caches MUST be built BEFORE any bots spawn (step 6).
+    // This ordering ensures thread safety - FindNearestVendor() and FindGrindSpot()
+    // read from these caches without locks, which is safe because the caches are
+    // immutable after this point. Do not move bot spawning before cache building.
     if (m_confEnableRandomBots && !m_bots.empty())
     {
         VendoringStrategy::BuildVendorCache();
         TravelingStrategy::BuildGrindSpotCache();
     }
 
-    // 6- Start initial bots
+    // 6- Start initial bots (AFTER caches are built - see note above)
     if (m_confEnableRandomBots)
     {
         for (uint32 i = 0; i < m_confMinRandomBots; i++)

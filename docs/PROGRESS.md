@@ -292,6 +292,16 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ## Session Log
 
+### 2026-01-24 - Code Audit Issue #7 Verified
+- **Issue**: Vendor/grind spot cache thread safety (potential race condition)
+- **Analysis**: Verified ordering in PlayerBotMgr::Load() is already correct
+  - Step 5.5: Caches built (VendoringStrategy, TravelingStrategy)
+  - Step 6: Bots spawn (AFTER caches are ready)
+  - Both caches also have fallback checks if somehow accessed before startup
+- **Fix**: Added explicit comment documenting the ordering requirement
+- **Files Modified**: `PlayerBotMgr.cpp`
+- **Impact**: Documents thread safety guarantee for future maintainers
+
 ### 2026-01-24 - Code Audit Issue #6 Fixed
 - **Issue**: Pre-travel vendor threshold mismatch (bots stuck when bags >60% or durability <50%)
 - **Fix**: Wired up VendoringStrategy::ForceStart() from TravelingStrategy
@@ -553,4 +563,4 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 *Last Updated: 2026-01-24*
-*Current State: Phase 5 complete. Code audit in progress (6/12 issues fixed). Travel system has 1 known bug remaining - see CURRENT_BUG.md.*
+*Current State: Phase 5 complete. Code audit in progress (7/12 issues fixed, all Critical/High/Medium done). Travel system has 1 known bug remaining - see CURRENT_BUG.md.*

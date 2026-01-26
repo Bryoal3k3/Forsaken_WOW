@@ -186,11 +186,9 @@ bool GrindingStrategy::IsValidGrindTarget(Player* pBot, Creature* pCreature) con
     if ((type & PATHFIND_NOPATH) || (type & PATHFIND_NOT_USING_PATH))
         return false;
 
-    // Line of Sight check for ranged classes (Mage, Priest, Warlock, Hunter)
-    // These classes stop at range to cast/shoot - if a wall blocks LoS, they get stuck
-    // Melee classes don't need this check - they path directly to the target
-    if (IsRangedClass(pBot->GetClass()) && !pBot->IsWithinLOSInMap(pCreature))
-        return false;
+    // NOTE: No LoS check here - bots should target mobs in caves/buildings
+    // and path through entrances. HandleRangedMovement/HandleMeleeMovement
+    // will ensure bots move closer if they can't see the target.
 
     return true;
 }

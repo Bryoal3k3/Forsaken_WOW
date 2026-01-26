@@ -63,7 +63,7 @@ namespace CombatHelpers
         return false;
     }
 
-    // Ranged movement handling: stop moving when in range unless target is snared
+    // Ranged movement handling: stop moving when in range AND have LoS
     // Used by: Mage, Priest, Warlock, Hunter
     inline void HandleRangedMovement(Player* pBot, Unit* pVictim, float castRange = 30.0f)
     {
@@ -73,13 +73,32 @@ namespace CombatHelpers
 
         float dist = pBot->GetDistance(pVictim);
         bool inCastRange = dist <= castRange;
+        bool hasLoS = pBot->IsWithinLOSInMap(pVictim);
 
-        // Only stop movement if we're in casting range AND target isn't snared
-        // This allows approach movement to continue until we can cast
-        if (inCastRange && !targetIsSnared && pBot->IsMoving())
+        // If at range but NO line of sight, move closer (through doors/cave entrances)
+        if (inCastRange && !hasLoS && !pBot->IsMoving())
+        {
+            pBot->GetMotionMaster()->MoveChase(pVictim);
+            return;
+        }
+
+        // Only stop movement if we're in casting range AND have LoS AND target isn't snared
+        if (inCastRange && hasLoS && !targetIsSnared && pBot->IsMoving())
         {
             pBot->StopMoving();
             pBot->GetMotionMaster()->Clear();
+        }
+    }
+
+    // Melee movement handling: ensure bot keeps chasing if not in melee range
+    // Used by: Warrior, Rogue, Paladin, Shaman, Druid
+    inline void HandleMeleeMovement(Player* pBot, Unit* pVictim)
+    {
+        // If not in melee range and not moving, re-issue chase command
+        // This handles cases where movement gets interrupted (pathfinding edge cases, etc.)
+        if (!pBot->CanReachWithMeleeAutoAttack(pVictim) && !pBot->IsMoving())
+        {
+            pBot->GetMotionMaster()->MoveChase(pVictim);
         }
     }
 }

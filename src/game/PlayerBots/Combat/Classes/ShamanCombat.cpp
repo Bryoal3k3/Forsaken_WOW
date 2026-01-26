@@ -25,6 +25,10 @@ void ShamanCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     if (!pVictim)
         return;
 
+    // Ensure we keep chasing if not in melee range (handles movement interruptions)
+    // Shaman is hybrid but engages as melee, so use melee movement
+    CombatHelpers::HandleMeleeMovement(pBot, pVictim);
+
     // Earth Shock
     if (m_pAI->m_spells.shaman.pEarthShock &&
         m_pAI->CanTryToCastSpell(pVictim, m_pAI->m_spells.shaman.pEarthShock))

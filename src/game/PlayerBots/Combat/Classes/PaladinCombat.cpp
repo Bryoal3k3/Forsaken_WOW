@@ -25,6 +25,9 @@ void PaladinCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     if (!pVictim)
         return;
 
+    // Ensure we keep chasing if not in melee range (handles movement interruptions)
+    CombatHelpers::HandleMeleeMovement(pBot, pVictim);
+
     // Judgement
     if (m_pAI->m_spells.paladin.pJudgement &&
         m_pAI->CanTryToCastSpell(pVictim, m_pAI->m_spells.paladin.pJudgement))

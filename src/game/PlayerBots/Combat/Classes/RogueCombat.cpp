@@ -25,6 +25,9 @@ void RogueCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     if (!pVictim)
         return;
 
+    // Ensure we keep chasing if not in melee range (handles movement interruptions)
+    CombatHelpers::HandleMeleeMovement(pBot, pVictim);
+
     // Slice and Dice if we have combo points
     if (m_pAI->m_spells.rogue.pSliceAndDice &&
         pBot->GetComboPoints() >= 2 &&

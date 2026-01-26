@@ -29,8 +29,10 @@ All Phase 5 bugs have been fixed:
 
 ### Current Active Bugs (See docs/CURRENT_BUG.md)
 - ✅ All major bugs fixed (2026-01-26)
+- ✅ Bug #9: Bots now enter caves/buildings to fight mobs (2026-01-26)
 - 🟡 Low priority: Invalid startPoly edge cases (handled by recovery system)
 - 🟡 Low priority: BuildPointPath log spam for short paths (cosmetic only)
+- 🟡 Low priority: Combat reactivity - bot ignores attackers while moving
 
 ---
 
@@ -51,6 +53,31 @@ A reactive danger zone cache was implemented for threat avoidance during travel 
 **To Enable:** Uncomment code in:
 - `RandomBotAI.cpp:UpdateOutOfCombatAI()` - ReportDanger call
 - `TravelingStrategy.cpp:GenerateWaypoints()` - FilterWaypointsForDanger call
+
+---
+
+## 2026-01-26 - BUG FIX: Bots Not Entering Caves/Buildings (Bug #9)
+
+### Problem
+Bots would target mobs inside caves and buildings but stand outside instead of pathing through the entrance to fight them. Both melee and ranged classes affected.
+
+### Root Cause (Two Issues)
+1. **Target Selection**: Bug #7's LoS check prevented ranged classes from targeting mobs inside structures entirely - a "half-ass fix" that avoided the problem instead of solving it
+2. **Movement Interruption**: When `MoveChase` was interrupted by `ChaseMovementGenerator` edge cases (INCOMPLETE path + LoS = StopMoving), nothing restarted the chase
+
+### Solution (Two Parts)
+1. **Removed LoS check from `IsValidGrindTarget()`** - Let bots target mobs in caves/buildings
+2. **Added movement persistence in combat handlers**:
+   - `HandleRangedMovement()`: If at casting range but NO line of sight → `MoveChase()` closer (through the door/entrance)
+   - `HandleMeleeMovement()`: If not in melee range and not moving → re-issue `MoveChase()`
+
+### Files Modified
+- `GrindingStrategy.cpp` - Removed LoS check from target validation
+- `CombatHelpers.h` - Added LoS check to `HandleRangedMovement()`, new `HandleMeleeMovement()` helper
+- `WarriorCombat.cpp`, `RogueCombat.cpp`, `PaladinCombat.cpp`, `ShamanCombat.cpp`, `DruidCombat.cpp` - Added `HandleMeleeMovement()` call
+
+### Result
+Bots now properly path through cave entrances and building doors to reach and kill mobs inside.
 
 ---
 
@@ -291,17 +318,18 @@ if (IsBot())
    - Casters (Mage, Priest, Warlock) move into range (28 yards) and cast
    - Hunters use Auto Shot at 25 yard range, melee fallback when mobs close in
 7. Autonomously find and attack mobs (including neutral/yellow mobs)
-8. Skip mobs already tapped by other players/bots
-9. Loot corpses after combat (gold + items)
-10. Rest when low HP/mana (sit + cheat regen, no consumables needed)
-11. Handle death - release spirit, ghost walk to corpse, resurrect
-12. Death loop detection - use spirit healer if dying too often
-13. Vendor when bags full or gear broken - walk to nearest vendor
-14. Sell all items and repair gear at vendor
-15. Persist correctly across server restarts (account IDs preserved)
-16. **Travel to new grind spots** when current area has no mobs (Phase 5)
-17. Handle getting stuck while traveling (30-sec timeout reset)
-18. Resume travel after combat interruption
+8. **Enter caves and buildings** to fight mobs inside (path through entrances)
+9. Skip mobs already tapped by other players/bots
+10. Loot corpses after combat (gold + items)
+11. Rest when low HP/mana (sit + cheat regen, no consumables needed)
+12. Handle death - release spirit, ghost walk to corpse, resurrect
+13. Death loop detection - use spirit healer if dying too often
+14. Vendor when bags full or gear broken - walk to nearest vendor
+15. Sell all items and repair gear at vendor
+16. Persist correctly across server restarts (account IDs preserved)
+17. **Travel to new grind spots** when current area has no mobs (Phase 5)
+18. Handle getting stuck while traveling (30-sec timeout reset)
+19. Resume travel after combat interruption
 
 **Known Limitations:**
 - Same-map travel only (no boats/zeppelins/flight paths)
@@ -734,4 +762,4 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 *Last Updated: 2026-01-26*
-*Current State: Phase 5 complete. All major bugs fixed (falling through floor, unreachable mobs, stuck protection). Travel system stable.*
+*Current State: Phase 5 complete. All major bugs fixed. Bots now enter caves/buildings to fight mobs inside.*

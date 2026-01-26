@@ -67,7 +67,7 @@ src/game/PlayerBots/
 ├── Combat/                     ← Combat system (class-specific handlers)
 │   ├── IClassCombat.h          ← Interface for class handlers
 │   ├── BotCombatMgr.h/cpp      ← Combat coordinator
-│   ├── CombatHelpers.h         ← Shared helpers (EngageCaster, EngageMelee, HandleRangedMovement)
+│   ├── CombatHelpers.h         ← Shared helpers (EngageCaster, EngageMelee, HandleRangedMovement, HandleMeleeMovement)
 │   └── Classes/                ← Per-class combat handlers (9 classes)
 │       ├── WarriorCombat.h/cpp
 │       ├── MageCombat.h/cpp
@@ -94,9 +94,11 @@ src/game/PlayerBots/
 ### Class Engagement Types
 | Class Type | Engagement Behavior |
 |------------|---------------------|
-| **Melee** (Warrior, Rogue, Paladin, Shaman, Druid) | `Attack()` + `MoveChase()` |
-| **Caster** (Mage, Priest, Warlock) | `MoveChase(28.0f)` to get in range, then cast to pull |
+| **Melee** (Warrior, Rogue, Paladin, Shaman, Druid) | `Attack()` + `MoveChase()` + `HandleMeleeMovement()` ensures chase persists |
+| **Caster** (Mage, Priest, Warlock) | `MoveChase(28.0f)` to get in range, `HandleRangedMovement()` moves closer if no LoS |
 | **Hunter** | Auto Shot at 25 yard range, melee fallback when mobs close in |
+
+**Note**: All classes can now enter caves/buildings - if they can't see the target at their preferred range, they move closer through entrances.
 
 ---
 
@@ -252,4 +254,4 @@ To enable: Uncomment the danger zone code in `RandomBotAI.cpp:UpdateOutOfCombatA
 
 ---
 
-*Last Updated: 2026-01-26*
+*Last Updated: 2026-01-26 (Bug #9 fix - bots enter caves/buildings)*

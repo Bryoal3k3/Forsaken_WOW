@@ -1,12 +1,12 @@
 # Current Bug Tracker
 
-## Status: 3 ACTIVE BUGS (1 New, 2 Low Priority)
+## Status: 2 ACTIVE BUGS (Low Priority)
 
 ---
 
-## Bug #8: Combat Reactivity - Bot Ignores Attackers While Moving - NEW
+## Bug #8: Combat Reactivity - Bot Ignores Attackers While Moving
 
-**Status**: IDENTIFIED
+**Status**: IDENTIFIED (Low Priority)
 
 **Symptom**: When a bot is moving toward a selected target and gets attacked by a different mob, the bot continues walking toward its original target instead of fighting back against the attacker.
 
@@ -102,24 +102,43 @@ ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=0 endPoly=8689 
 
 ## Recently Fixed (2026-01-26)
 
-### Bug #7: Casters Targeting Mobs Without Line of Sight - FIXED
+### Bug #9: Bots Not Entering Caves/Buildings to Fight Mobs - FIXED
 
-**Issue**: Caster/ranged bots (Mage, Priest, Warlock, Hunter) would target mobs inside buildings/barns, move into casting range outside the structure, but couldn't cast because a wall blocked Line of Sight. They would loop forever trying to cast.
+**Issue**: Bots would target mobs inside caves/buildings but stand outside instead of pathing through the entrance to kill them. Both melee and ranged classes were affected.
 
-**Root Cause**: `IsValidGrindTarget()` checked reachability (PathFinder) but not Line of Sight. Ranged classes stop at distance to cast - if LoS is blocked at that position, they get stuck.
+**Root Cause (Two Problems)**:
+1. **Target selection**: Bug #7's LoS check prevented ranged classes from targeting mobs inside structures entirely
+2. **Movement**: When bots did target a mob inside, `MoveChase` would get interrupted by edge cases in `ChaseMovementGenerator` (INCOMPLETE path + LoS = StopMoving), and nothing restarted the chase
 
-**Fix**: Added LoS check in `IsValidGrindTarget()` for ranged classes only:
-- Created `IsRangedClass()` helper - returns true for Mage, Priest, Warlock, Hunter
-- Added `IsWithinLOSInMap()` check after reachability check
-- Melee classes don't need this - they path directly to the target
+**Fix (Two Parts)**:
+1. **Removed LoS check from target selection** - Bots should target mobs in caves/buildings and path through entrances. The LoS check was a "half-ass fix" that prevented targeting instead of enabling proper movement.
 
-**Performance**: Only ranged classes (~33% of bots) pay the LoS check cost. At 3000 bots, estimated ~5000 LoS checks/sec - acceptable.
+2. **Added movement persistence in combat update**:
+   - `HandleRangedMovement()`: If at range but NO LoS → `MoveChase()` closer (through the door)
+   - `HandleMeleeMovement()`: If not in melee range and not moving → re-issue `MoveChase()`
 
 **Files Modified**:
-- `GrindingStrategy.h` - Added `IsRangedClass()` helper function
-- `GrindingStrategy.cpp` - Added LoS check for ranged classes in `IsValidGrindTarget()`
+- `GrindingStrategy.cpp` - Removed LoS check from `IsValidGrindTarget()`
+- `CombatHelpers.h` - Added LoS check to `HandleRangedMovement()`, added new `HandleMeleeMovement()` helper
+- `WarriorCombat.cpp` - Added `HandleMeleeMovement()` call
+- `RogueCombat.cpp` - Added `HandleMeleeMovement()` call
+- `PaladinCombat.cpp` - Added `HandleMeleeMovement()` call
+- `ShamanCombat.cpp` - Added `HandleMeleeMovement()` call
+- `DruidCombat.cpp` - Added `HandleMeleeMovement()` call
 
-**Tested 2026-01-26**: Casters now avoid mobs inside buildings they can't see.
+**Tested 2026-01-26**: Bots now properly enter caves and buildings to kill mobs inside.
+
+---
+
+### Bug #7: Casters Targeting Mobs Without Line of Sight - SUPERSEDED BY BUG #9
+
+**Original Issue**: Caster/ranged bots would target mobs inside buildings, move into casting range outside, but couldn't cast due to LoS block.
+
+**Original Fix**: Added LoS check in `IsValidGrindTarget()` for ranged classes to skip mobs they couldn't see.
+
+**Problem**: This prevented bots from EVER grinding inside caves/buildings - they'd skip all mobs inside.
+
+**Better Fix (Bug #9)**: Instead of skipping the target, make bots MOVE CLOSER when they can't see. The LoS check was removed from target selection and moved to the movement handler.
 
 ---
 
@@ -216,17 +235,19 @@ if ((type & PATHFIND_NOPATH) || (type & PATHFIND_NOT_USING_PATH))
 2. Investigated and fixed Bug #3 & #4 (unreachable mobs) - reachability check with PATHFIND_NOT_USING_PATH
 3. Investigated and fixed Bug #6 (aggressive stuck protection) - changed to Map::GetHeight() based detection
 4. Identified Bug #5 (BuildPointPath spam) - low priority, cosmetic only
-5. Investigated and fixed Bug #7 (LoS issue with mobs inside buildings) - LoS check for ranged classes
+5. Fixed Bug #7 (LoS issue with mobs inside buildings) - initial LoS check for ranged classes
 6. Identified Bug #8 (combat reactivity) - bot ignores attackers while moving to target
+7. **Fixed Bug #9 (cave/building targeting)** - Supersedes Bug #7 with proper movement-based solution
 
 ### Bugs Fixed This Session
 - Bug #1: Bot falling through floor ✅
 - Bug #3 & #4: Unreachable mobs ✅
 - Bug #6: Aggressive stuck protection ✅
-- Bug #7: Casters targeting mobs without LoS ✅
+- Bug #7: Casters targeting mobs without LoS ✅ (superseded by #9)
+- Bug #9: Bots not entering caves/buildings ✅
 
 ### Remaining
-- Bug #8: Combat reactivity - bot ignores attackers (NEW)
+- Bug #8: Combat reactivity - bot ignores attackers (Low Priority)
 - Bug #2: Invalid startPoly edge cases (Low Priority - handled by recovery)
 - Bug #5: BuildPointPath log spam (Low Priority - cosmetic only)
 
@@ -242,4 +263,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-26 (Bug #1, #3/#4, #6, #7 fixed; Bug #8 identified)*
+*Last Updated: 2026-01-26 (Bug #9 fixed - bots now enter caves/buildings to fight)*

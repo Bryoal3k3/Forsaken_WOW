@@ -25,6 +25,9 @@ void WarriorCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     if (!pVictim)
         return;
 
+    // Ensure we keep chasing if not in melee range (handles movement interruptions)
+    CombatHelpers::HandleMeleeMovement(pBot, pVictim);
+
     // Execute at low health
     if (m_pAI->m_spells.warrior.pExecute &&
         (pVictim->GetHealthPercent() < 20.0f) &&

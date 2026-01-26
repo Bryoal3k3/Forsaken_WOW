@@ -25,6 +25,10 @@ void DruidCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     if (!pVictim)
         return;
 
+    // Ensure we keep chasing if not in melee range (handles movement interruptions)
+    // Druid currently fights as melee with caster spells
+    CombatHelpers::HandleMeleeMovement(pBot, pVictim);
+
     // Moonfire (DoT)
     if (m_pAI->m_spells.druid.pMoonfire &&
         !pVictim->HasAura(m_pAI->m_spells.druid.pMoonfire->Id) &&

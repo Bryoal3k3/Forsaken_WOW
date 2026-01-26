@@ -78,10 +78,21 @@ A reactive danger zone cache was implemented for threat avoidance during travel 
 - **Fix**: Changed from PathFinder-based to Map::GetHeight()-based detection. Only triggers if terrain is actually invalid at bot's position
 - **Files Modified**: `RandomBotAI.cpp` (removed PathFinder.h and cmath includes)
 
+### Bug #7: Casters Targeting Mobs Without Line of Sight - FIXED
+- **Problem**: Caster/ranged bots (Mage, Priest, Warlock, Hunter) would target mobs inside buildings, move into casting range outside, but couldn't cast due to wall blocking LoS. They looped forever.
+- **Root Cause**: `IsValidGrindTarget()` checked reachability but not Line of Sight. Ranged classes stop at distance - if LoS blocked there, stuck.
+- **Fix**: Added LoS check for ranged classes only:
+  - Created `IsRangedClass()` helper (Mage, Priest, Warlock, Hunter)
+  - Added `IsWithinLOSInMap()` check after reachability check
+  - Melee classes unaffected - they path directly to target
+- **Performance**: ~5000 LoS checks/sec at 3000 bots (only ranged classes pay cost)
+- **Files Modified**: `GrindingStrategy.h`, `GrindingStrategy.cpp`
+
 ### Summary
 All major bugs now fixed. Only low-priority issues remaining:
 - Bug #2: Invalid startPoly edge cases (handled by recovery system)
 - Bug #5: BuildPointPath log spam (cosmetic only)
+- Bug #8: Combat reactivity (identified - bot ignores attackers while moving)
 
 ---
 

@@ -4,41 +4,32 @@
 
 ---
 
-## Bug #7: Casters Targeting Mobs Without Line of Sight - NEW
+## Bug #8: Combat Reactivity - Bot Ignores Attackers While Moving - NEW
 
-**Status**: INVESTIGATING
+**Status**: IDENTIFIED
 
-**Symptom**: Caster bots (observed with Undead in Tirisfal) target mobs inside buildings/barns. They stand outside facing the target, in range, but can't cast because a wall blocks Line of Sight. They stand idle trying to cast repeatedly.
-
-**Screenshot**: Undead bot "Daner" targeting "Wretched Zombie" inside a barn - bot is outside, facing target, in range, but wall blocks LoS.
+**Symptom**: When a bot is moving toward a selected target and gets attacked by a different mob, the bot continues walking toward its original target instead of fighting back against the attacker.
 
 **Key Details**:
-- Bot passes all `IsValidGrindTarget()` checks (distance, level, faction, reachability)
-- Bot is in casting range (< 30 yards)
-- Bot faces target correctly
-- But wall/building obstructs Line of Sight
-- Spells fail silently due to LoS check in spell system
+- Bot targets Mob A, starts walking toward it
+- Mob B attacks bot from behind/side
+- Bot enters combat (`IsInCombat() = true`)
+- `GetVictim()` is still Mob A
+- Bot keeps walking toward Mob A while Mob B beats on them
+
+**Impact**:
+- Low-level: Minor issue in starting zones with mostly yellow mobs
+- High-level: Serious issue - bot could die walking through mob packs
 
 **Potential Fixes**:
-
-1. **Add LoS check to `IsValidGrindTarget()`** (Target Selection)
-   - Use `IsWithinLOSInMap()` to verify clear sightline
-   - Rejects mobs behind walls before engagement
-   - Cost: One LoS check per potential target
-
-2. **Add LoS check to combat/engagement** (Combat Layer)
-   - If no LoS to current target, clear target and find new one
-   - Handles case where mob runs behind cover during combat
-   - More reactive but doesn't prevent initial bad selection
-
-3. **Both** (Defense in depth)
-   - Check at selection AND during combat
-   - Most robust but higher performance cost
+1. In `UpdateInCombatAI()`, check if bot is being attacked by something other than current target
+2. If attacker is closer or current target isn't attacking back, switch targets
+3. Consider threat/aggro list for smarter target selection
 
 **Related Code**:
-- `GrindingStrategy.cpp:IsValidGrindTarget()` - Target validation
-- `BotCombatMgr.cpp` - Combat updates
-- `Unit::IsWithinLOSInMap()` - LoS check function
+- `RandomBotAI.cpp:UpdateInCombatAI()` - Combat update loop
+- `Player::GetVictim()` - Current attack target
+- `Unit::GetAttackers()` - List of units attacking this unit
 
 ---
 
@@ -110,6 +101,27 @@ ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=0 endPoly=8689 
 ---
 
 ## Recently Fixed (2026-01-26)
+
+### Bug #7: Casters Targeting Mobs Without Line of Sight - FIXED
+
+**Issue**: Caster/ranged bots (Mage, Priest, Warlock, Hunter) would target mobs inside buildings/barns, move into casting range outside the structure, but couldn't cast because a wall blocked Line of Sight. They would loop forever trying to cast.
+
+**Root Cause**: `IsValidGrindTarget()` checked reachability (PathFinder) but not Line of Sight. Ranged classes stop at distance to cast - if LoS is blocked at that position, they get stuck.
+
+**Fix**: Added LoS check in `IsValidGrindTarget()` for ranged classes only:
+- Created `IsRangedClass()` helper - returns true for Mage, Priest, Warlock, Hunter
+- Added `IsWithinLOSInMap()` check after reachability check
+- Melee classes don't need this - they path directly to the target
+
+**Performance**: Only ranged classes (~33% of bots) pay the LoS check cost. At 3000 bots, estimated ~5000 LoS checks/sec - acceptable.
+
+**Files Modified**:
+- `GrindingStrategy.h` - Added `IsRangedClass()` helper function
+- `GrindingStrategy.cpp` - Added LoS check for ranged classes in `IsValidGrindTarget()`
+
+**Tested 2026-01-26**: Casters now avoid mobs inside buildings they can't see.
+
+---
 
 ### Bug #6: Stuck Protection Too Aggressive - FIXED
 
@@ -204,15 +216,17 @@ if ((type & PATHFIND_NOPATH) || (type & PATHFIND_NOT_USING_PATH))
 2. Investigated and fixed Bug #3 & #4 (unreachable mobs) - reachability check with PATHFIND_NOT_USING_PATH
 3. Investigated and fixed Bug #6 (aggressive stuck protection) - changed to Map::GetHeight() based detection
 4. Identified Bug #5 (BuildPointPath spam) - low priority, cosmetic only
-5. Identified Bug #7 (LoS issue with mobs inside buildings) - casters stuck trying to cast through walls
+5. Investigated and fixed Bug #7 (LoS issue with mobs inside buildings) - LoS check for ranged classes
+6. Identified Bug #8 (combat reactivity) - bot ignores attackers while moving to target
 
 ### Bugs Fixed This Session
 - Bug #1: Bot falling through floor ✅
 - Bug #3 & #4: Unreachable mobs ✅
 - Bug #6: Aggressive stuck protection ✅
+- Bug #7: Casters targeting mobs without LoS ✅
 
 ### Remaining
-- Bug #7: LoS issue - casters targeting mobs inside buildings (NEW)
+- Bug #8: Combat reactivity - bot ignores attackers (NEW)
 - Bug #2: Invalid startPoly edge cases (Low Priority - handled by recovery)
 - Bug #5: BuildPointPath log spam (Low Priority - cosmetic only)
 
@@ -228,4 +242,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-26 (Bug #1, #3/#4, #6 fixed; Bug #7 identified)*
+*Last Updated: 2026-01-26 (Bug #1, #3/#4, #6, #7 fixed; Bug #8 identified)*

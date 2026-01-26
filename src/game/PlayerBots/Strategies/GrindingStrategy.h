@@ -10,10 +10,27 @@
 #define MANGOS_GRINDINGSTRATEGY_H
 
 #include "IBotStrategy.h"
+#include "SharedDefines.h"  // For CLASS_* constants
 
 class BotCombatMgr;
 class Creature;
 class Player;
+
+// Helper: Returns true for classes that engage at range and need Line of Sight
+// These classes stop at distance to cast/shoot - if LoS is blocked, they get stuck
+inline bool IsRangedClass(uint8 classId)
+{
+    switch (classId)
+    {
+        case CLASS_MAGE:
+        case CLASS_PRIEST:
+        case CLASS_WARLOCK:
+        case CLASS_HUNTER:
+            return true;
+        default:
+            return false;
+    }
+}
 
 // Result of grinding update - explicit signaling for travel decisions
 enum class GrindingResult

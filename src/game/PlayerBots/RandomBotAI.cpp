@@ -25,9 +25,7 @@
 #include "Spell.h"
 #include "SpellAuras.h"
 #include "MotionMaster.h"
-#include "PathFinder.h"
 #include "Log.h"
-#include <cmath>
 
 #define RB_UPDATE_INTERVAL 1000
 
@@ -107,17 +105,22 @@ void RandomBotAI::UpdateAI(uint32 const diff)
     }
 
     // Invalid position detection - check if bot has fallen through floor
-    // If position has no valid navmesh for consecutive ticks, teleport to safety
+    // Uses Map::GetHeight() to verify terrain exists at bot's XY position
+    // If terrain height is invalid for consecutive ticks, teleport to safety
     {
-        PathFinder path(me);
-        // Try to build a path to a point 5 yards ahead (trivial path)
-        float destX = me->GetPositionX() + 5.0f * std::cos(me->GetOrientation());
-        float destY = me->GetPositionY() + 5.0f * std::sin(me->GetOrientation());
-        float destZ = me->GetPositionZ();
-        path.calculate(destX, destY, destZ, false);  // false = don't use straight line fallback
+        bool positionValid = true;
+        if (Map* map = me->GetMap())
+        {
+            float terrainZ = map->GetHeight(me->GetPositionX(), me->GetPositionY(), me->GetPositionZ() + 5.0f);
+            // INVALID_HEIGHT means no terrain data at this position (fallen through floor)
+            // Also check if bot's Z is way below terrain (fell through but terrain exists above)
+            if (terrainZ <= INVALID_HEIGHT || me->GetPositionZ() < terrainZ - 50.0f)
+            {
+                positionValid = false;
+            }
+        }
 
-        // PATHFIND_NOPATH with a trivial destination usually means startPoly=0 (invalid position)
-        if (path.getPathType() & PATHFIND_NOPATH)
+        if (!positionValid)
         {
             ++m_invalidPosCount;
 

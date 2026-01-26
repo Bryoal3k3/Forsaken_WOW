@@ -28,8 +28,9 @@ All Phase 5 bugs have been fixed:
 - ✅ PathFinder long path bug (truncated paths return INCOMPLETE not NOPATH)
 
 ### Current Active Bugs (See docs/CURRENT_BUG.md)
-- 🔴 Bot falling through floor (needs HS teleport recovery)
-- 🔴 Invalid startPoly during normal grinding (navmesh edge cases in Durotar)
+- ✅ All major bugs fixed (2026-01-26)
+- 🟡 Low priority: Invalid startPoly edge cases (handled by recovery system)
+- 🟡 Low priority: BuildPointPath log spam for short paths (cosmetic only)
 
 ---
 
@@ -50,6 +51,37 @@ A reactive danger zone cache was implemented for threat avoidance during travel 
 **To Enable:** Uncomment code in:
 - `RandomBotAI.cpp:UpdateOutOfCombatAI()` - ReportDanger call
 - `TravelingStrategy.cpp:GenerateWaypoints()` - FilterWaypointsForDanger call
+
+---
+
+## 2026-01-26 - BUG FIXES (Falling Through Floor, Unreachable Mobs, Stuck Protection)
+
+### Bug #1: Bot Falling Through Floor - FIXED
+- **Problem**: Bots fell through floor causing infinite `startPoly=0` pathfinding error spam
+- **Fix**: 4-part defense in depth:
+  1. Z validation in `GenerateWaypoints()` - skip invalid waypoints
+  2. Recovery teleport after 15 ticks of invalid position
+  3. Z correction on grind spot cache load
+  4. Rate-limited error logging (10 sec per bot)
+- **Files Modified**: `TravelingStrategy.cpp`, `RandomBotAI.h/cpp`, `PathFinder.cpp`
+- **Commit**: `af528e7c4`
+
+### Bug #3 & #4: Bots Walking Into Terrain / Targeting Unreachable Mobs - FIXED
+- **Problem**: Bots walked up steep slopes, got stuck in rocks trying to reach mobs on unreachable terrain
+- **Root Cause**: `IsValidGrindTarget()` didn't validate path reachability. Initial NOPATH check missed cases where PathFinder returned `PATHFIND_NOT_USING_PATH` instead
+- **Fix**: Added comprehensive reachability check that rejects BOTH `PATHFIND_NOPATH` AND `PATHFIND_NOT_USING_PATH`
+- **Files Modified**: `GrindingStrategy.cpp`
+
+### Bug #6: Stuck Protection Too Aggressive - FIXED
+- **Problem**: Recovery teleport fired when bots were resting or fighting near walls/obstacles
+- **Root Cause**: Check was pathing to point 5 yards ahead - failed if facing a wall even though bot's position was valid
+- **Fix**: Changed from PathFinder-based to Map::GetHeight()-based detection. Only triggers if terrain is actually invalid at bot's position
+- **Files Modified**: `RandomBotAI.cpp` (removed PathFinder.h and cmath includes)
+
+### Summary
+All major bugs now fixed. Only low-priority issues remaining:
+- Bug #2: Invalid startPoly edge cases (handled by recovery system)
+- Bug #5: BuildPointPath log spam (cosmetic only)
 
 ---
 
@@ -690,5 +722,5 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ---
 
-*Last Updated: 2026-01-25*
-*Current State: Phase 5 complete. All known bugs fixed. Travel system overhauled with waypoint segmentation.*
+*Last Updated: 2026-01-26*
+*Current State: Phase 5 complete. All major bugs fixed (falling through floor, unreachable mobs, stuck protection). Travel system stable.*

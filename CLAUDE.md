@@ -229,10 +229,13 @@ See `docs/CURRENT_BUG.md` for detailed bug tracking and fix history.
 - Movement sync bug (waypoint segmentation for long-distance travel)
 - Combat facing bug (bots face target before attacking)
 - Tree collision (re-extracted vmaps/mmaps from clean 1.12 client)
+- Bot falling through floor (Z validation + recovery teleport)
+- Unreachable mob targeting (reachability check rejects PATHFIND_NOT_USING_PATH)
+- Overly aggressive stuck protection (changed to Map::GetHeight() based detection)
 
-**Active Bugs:**
-- Bot falling through floor (needs HS teleport recovery)
-- Invalid startPoly during normal grinding (navmesh edge cases in Durotar)
+**Active Bugs (Low Priority):**
+- Invalid startPoly edge cases (handled by recovery system)
+- BuildPointPath log spam for short paths (cosmetic only)
 
 ---
 
@@ -249,4 +252,4 @@ To enable: Uncomment the danger zone code in `RandomBotAI.cpp:UpdateOutOfCombatA
 
 ---
 
-*Last Updated: 2026-01-25*
+*Last Updated: 2026-01-26*

@@ -179,9 +179,11 @@ bool GrindingStrategy::IsValidGrindTarget(Player* pBot, Creature* pCreature) con
     // Reachability check: verify mob's position is on valid navmesh
     // This prevents targeting mobs on steep slopes or unreachable terrain
     // PathFinder does a quick poly lookup first - if endPoly=0, returns NOPATH immediately
+    // Also reject PATHFIND_NOT_USING_PATH - means "go straight, no real path" which fails on terrain
     PathFinder path(pBot);
     path.calculate(pCreature->GetPositionX(), pCreature->GetPositionY(), pCreature->GetPositionZ(), false);
-    if (path.getPathType() & PATHFIND_NOPATH)
+    PathType type = path.getPathType();
+    if ((type & PATHFIND_NOPATH) || (type & PATHFIND_NOT_USING_PATH))
         return false;
 
     return true;

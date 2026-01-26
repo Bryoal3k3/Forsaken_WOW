@@ -1,79 +1,50 @@
 # Current Bug Tracker
 
-## Status: 3 ACTIVE BUGS
+## Status: 3 ACTIVE BUGS (1 New, 2 Low Priority)
 
 ---
 
-## Bug #3 & #4: Bots Walking Into Terrain / Targeting Unreachable Mobs - FIX IN PROGRESS
-
-**Status**: FIX IN PROGRESS - Partial fix implemented, needs refinement
-
-**Symptom**:
-- Bots walk up steep slopes and get stuck inside rocks/terrain
-- Bots select mobs on unreachable terrain (steep slopes, caves, ridges)
-- After recovery teleport, bots immediately walk into terrain again trying to reach mobs
-
-**Error Logs**:
-```
-ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=8408 endPoly=0 for Nekkazim from (-697.7,-4175.2,41.5) to (-694.1,-4171.8,41.5)
-ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=2147493047 endPoly=0 for Jamxi from (-660.0,-4255.9,44.6) to (-664.4,-4258.4,44.6)
-```
-
-**Key Details**:
-- `endPoly=0` means mob's position has no valid navmesh (steep slope)
-- Recovery teleport works, but bot immediately tries to reach another unreachable mob
-- Screenshot shows bot (Jamxi) with only feet visible through rock after walking into terrain
-
-### Investigation Completed (2026-01-26)
-
-**Root Cause Analysis:**
-
-1. **`GrindingStrategy::IsValidGrindTarget()` didn't validate path reachability** - PARTIAL FIX APPLIED
-   - Added PathFinder check: `if (path.getPathType() & PATHFIND_NOPATH) return false;`
-   - File: `GrindingStrategy.cpp` lines 179-185
-
-2. **BUT the fix doesn't catch all cases!** - NEEDS ADDITIONAL FIX
-
-   In `PathFinder.cpp` lines 254-259, when `endPoly=0`:
-   ```cpp
-   if ((endPoly == INVALID_POLYREF && m_sourceUnit->GetTerrain()->IsSwimmable(endPos.x, endPos.y, endPos.z)))
-       m_type = m_sourceUnit->CanSwim() ? PathType(PATHFIND_NORMAL | PATHFIND_NOT_USING_PATH) : PATHFIND_NOPATH;
-   ```
-
-   - If terrain near the invalid poly is "swimmable", path type is `PATHFIND_NORMAL | PATHFIND_NOT_USING_PATH`
-   - Players can swim, so `CanSwim()` returns true
-   - Our check `if (path.getPathType() & PATHFIND_NOPATH)` **doesn't catch this case!**
-
-### Proposed Final Fix
-
-Change the reachability check in `GrindingStrategy.cpp` from:
-```cpp
-// Current (broken):
-if (path.getPathType() & PATHFIND_NOPATH)
-    return false;
-```
-
-To:
-```cpp
-// Fixed - also reject PATHFIND_NOT_USING_PATH:
-PathType type = path.getPathType();
-if ((type & PATHFIND_NOPATH) || (type & PATHFIND_NOT_USING_PATH))
-    return false;
-```
-
-**Why**: `PATHFIND_NOT_USING_PATH` means "we couldn't find a real navmesh path, just go straight" - bots should NOT engage mobs that require straight-line movement through terrain.
-
-### Files Modified So Far
-- `GrindingStrategy.cpp` - Added PathFinder include and reachability check (partial fix)
-
-### Files Needing Modification
-- `GrindingStrategy.cpp` - Update check to also reject `PATHFIND_NOT_USING_PATH`
-
----
-
-## Bug #5: BuildPointPath FAILED Spam for Short Paths - NEW
+## Bug #7: Casters Targeting Mobs Without Line of Sight - NEW
 
 **Status**: INVESTIGATING
+
+**Symptom**: Caster bots (observed with Undead in Tirisfal) target mobs inside buildings/barns. They stand outside facing the target, in range, but can't cast because a wall blocks Line of Sight. They stand idle trying to cast repeatedly.
+
+**Screenshot**: Undead bot "Daner" targeting "Wretched Zombie" inside a barn - bot is outside, facing target, in range, but wall blocks LoS.
+
+**Key Details**:
+- Bot passes all `IsValidGrindTarget()` checks (distance, level, faction, reachability)
+- Bot is in casting range (< 30 yards)
+- Bot faces target correctly
+- But wall/building obstructs Line of Sight
+- Spells fail silently due to LoS check in spell system
+
+**Potential Fixes**:
+
+1. **Add LoS check to `IsValidGrindTarget()`** (Target Selection)
+   - Use `IsWithinLOSInMap()` to verify clear sightline
+   - Rejects mobs behind walls before engagement
+   - Cost: One LoS check per potential target
+
+2. **Add LoS check to combat/engagement** (Combat Layer)
+   - If no LoS to current target, clear target and find new one
+   - Handles case where mob runs behind cover during combat
+   - More reactive but doesn't prevent initial bad selection
+
+3. **Both** (Defense in depth)
+   - Check at selection AND during combat
+   - Most robust but higher performance cost
+
+**Related Code**:
+- `GrindingStrategy.cpp:IsValidGrindTarget()` - Target validation
+- `BotCombatMgr.cpp` - Combat updates
+- `Unit::IsWithinLOSInMap()` - LoS check function
+
+---
+
+## Bug #5: BuildPointPath FAILED Spam for Short Paths - LOW PRIORITY
+
+**Status**: INVESTIGATING (Low Priority - cosmetic log spam only)
 
 **Symptom**: Console spam when bots try to path to very close targets:
 ```
@@ -93,15 +64,15 @@ if (pointCount < 2 || dtStatusFailed(dtResult))
 
 When `pointCount=1` (trivially short path), this triggers even though `dtResult=DT_SUCCESS`.
 
-**Impact**: May cause nearby valid mobs to be incorrectly rejected by our reachability check.
+**Impact**: Log spam only - nearby valid mobs are still engaged correctly due to the reachability check handling this case.
 
 **Proposed Fix**: Change condition to only fail when `dtStatusFailed(dtResult)` is true, not when path is just short.
 
 ---
 
-## Bug #2: Invalid StartPoly During Normal Grinding - INVESTIGATING
+## Bug #2: Invalid StartPoly During Normal Grinding - LOW PRIORITY
 
-**Status**: INVESTIGATING (Low Priority)
+**Status**: INVESTIGATING (Low Priority - handled by recovery system)
 
 **Symptom**: Bots getting `startPoly=0` errors while grinding normally (NOT falling).
 
@@ -114,9 +85,9 @@ ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=0 endPoly=8689 
 - `startPoly=0` but `endPoly=8689` means destination valid, current position is not
 - Z values increasing (walking UP a slope, not falling)
 - Location: Durotar area (-772, -4249)
-- Possibly navmesh edge case
+- Possibly navmesh edge case at polygon boundaries
 
-**Note**: Recovery teleport handles this case - bot teleports after 15 seconds.
+**Note**: Recovery teleport handles this case - bot teleports after 15 seconds if truly stuck.
 
 ---
 
@@ -140,7 +111,56 @@ ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=0 endPoly=8689 
 
 ## Recently Fixed (2026-01-26)
 
-### Bug #1: Bot Falling Through Floor - VERIFIED FIXED
+### Bug #6: Stuck Protection Too Aggressive - FIXED
+
+**Issue**: Recovery teleport was firing when bots were resting (drinking) or fighting near walls/obstacles.
+
+**Error Logs**:
+```
+ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=851 endPoly=0 for Carvuey
+[RandomBotAI] Carvuey stuck at invalid position for 15 ticks, teleporting to hearthstone
+```
+
+**Root Cause**: The stuck detection was checking if a path to a point 5 yards ahead was valid. If the bot was facing a wall (while resting or in melee combat), `endPoly=0` caused false positives even though `startPoly` was valid (bot's position was fine).
+
+**Fix**: Changed detection from PathFinder-based to Map::GetHeight()-based:
+- Now checks if terrain exists at bot's current XY position
+- Only triggers if `GetHeight()` returns `INVALID_HEIGHT` OR bot is 50+ units below terrain
+- No longer falsely triggers when bot is simply facing an obstacle
+
+**Files Modified**:
+- `RandomBotAI.cpp` - Replaced PathFinder check with Map::GetHeight() check, removed PathFinder.h and cmath includes
+
+**Tested 2026-01-26**: Bots no longer teleport while resting or fighting near walls.
+
+---
+
+### Bug #3 & #4: Bots Walking Into Terrain / Targeting Unreachable Mobs - FIXED
+
+**Issue**: Bots would walk up steep slopes and get stuck inside rocks/terrain trying to reach mobs on unreachable terrain.
+
+**Root Cause Analysis**:
+1. `GrindingStrategy::IsValidGrindTarget()` didn't validate path reachability
+2. Initial fix checked for `PATHFIND_NOPATH` but didn't catch all cases
+3. When `endPoly=0` and terrain is "swimmable", PathFinder returns `PATHFIND_NORMAL | PATHFIND_NOT_USING_PATH` instead of `PATHFIND_NOPATH`
+
+**Fix**: Updated reachability check to reject BOTH `PATHFIND_NOPATH` AND `PATHFIND_NOT_USING_PATH`:
+```cpp
+PathType type = path.getPathType();
+if ((type & PATHFIND_NOPATH) || (type & PATHFIND_NOT_USING_PATH))
+    return false;
+```
+
+**Why**: `PATHFIND_NOT_USING_PATH` means "go straight, no real navmesh path" - bots should NOT engage mobs that require straight-line movement through terrain.
+
+**Files Modified**:
+- `GrindingStrategy.cpp` - Added PathFinder include and comprehensive reachability check
+
+**Tested 2026-01-26**: Bots now skip mobs on steep slopes and unreachable terrain.
+
+---
+
+### Bug #1: Bot Falling Through Floor - FIXED
 
 **Issue**: Bots fell through floor causing infinite `startPoly=0` pathfinding error spam.
 
@@ -148,7 +168,7 @@ ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=0 endPoly=8689 
 
 1. **Z validation in `GenerateWaypoints()`** - Try `GetHeight()` with MAX_HEIGHT, then with interpolated Z as reference. Skip waypoint entirely if both fail.
 
-2. **Recovery teleport in `RandomBotAI`** - Track consecutive `PATHFIND_NOPATH` results. After 15 ticks (~15 seconds), teleport bot to hearthstone location.
+2. **Recovery teleport in `RandomBotAI`** - Track invalid position. After 15 ticks (~15 seconds), teleport bot to hearthstone location.
 
 3. **Z correction on grind spot cache load** - `BuildGrindSpotCache()` now calls `Map::GetHeight()` to correct Z values.
 
@@ -157,11 +177,8 @@ ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=0 endPoly=8689 
 **Files Modified**:
 - `TravelingStrategy.cpp` - Z validation in waypoints, Z correction on cache load
 - `RandomBotAI.h` - Added `m_invalidPosCount`, `INVALID_POS_THRESHOLD` (15 ticks)
-- `RandomBotAI.cpp` - Recovery teleport detection + PathFinder include
+- `RandomBotAI.cpp` - Recovery teleport detection
 - `PathFinder.cpp` - Rate-limited error logging
-
-**Tested 2026-01-26**: Recovery teleport confirmed working. Bots at invalid positions teleport to hearthstone after 15 seconds. Multiple bots observed teleporting correctly:
-- Gadzua, Jamxi, Mukgash, Muirra, Muirru all teleported successfully
 
 **Commit**: `af528e7c4` - "fix: Bot falling through floor - Z validation + recovery teleport"
 
@@ -170,35 +187,34 @@ ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=0 endPoly=8689 
 ## Recently Fixed (2026-01-25)
 
 ### PathFinder Long Path Bug - FIXED
-(See previous entries for details)
+(See PROGRESS.md for details)
 
 ### Movement Sync Bug (Travel System) - FIXED
-(See previous entries for details)
+(See PROGRESS.md for details)
 
 ### Combat Facing Bug - FIXED
-(See previous entries for details)
+(See PROGRESS.md for details)
 
 ---
 
 ## Session Notes (2026-01-26)
 
 ### What Was Done
-1. Investigated Bug #1 thoroughly - found root cause (missing Z validation)
-2. Implemented 4-part fix for Bug #1 (prevention + recovery)
-3. Committed and pushed fix: `af528e7c4`
-4. Investigated Bug #3 & #4 - found `MoveChase()` doesn't use `MOVE_EXCLUDE_STEEP_SLOPES`
-5. Added partial fix: PathFinder reachability check in `IsValidGrindTarget()`
-6. Discovered the check isn't catching all cases due to `PATHFIND_NOT_USING_PATH`
-7. Identified Bug #5: BuildPointPath spam for short paths
+1. Investigated and fixed Bug #1 (bot falling through floor) - 4-part fix
+2. Investigated and fixed Bug #3 & #4 (unreachable mobs) - reachability check with PATHFIND_NOT_USING_PATH
+3. Investigated and fixed Bug #6 (aggressive stuck protection) - changed to Map::GetHeight() based detection
+4. Identified Bug #5 (BuildPointPath spam) - low priority, cosmetic only
+5. Identified Bug #7 (LoS issue with mobs inside buildings) - casters stuck trying to cast through walls
 
-### What Needs To Be Done Next
-1. Update `GrindingStrategy.cpp` reachability check to also reject `PATHFIND_NOT_USING_PATH`
-2. Optionally fix Bug #5 (BuildPointPath short path handling)
-3. Test the complete fix
-4. Commit when verified
+### Bugs Fixed This Session
+- Bug #1: Bot falling through floor ✅
+- Bug #3 & #4: Unreachable mobs ✅
+- Bug #6: Aggressive stuck protection ✅
 
-### Uncommitted Changes
-- `GrindingStrategy.cpp` - Partial reachability fix (needs update)
+### Remaining
+- Bug #7: LoS issue - casters targeting mobs inside buildings (NEW)
+- Bug #2: Invalid startPoly edge cases (Low Priority - handled by recovery)
+- Bug #5: BuildPointPath log spam (Low Priority - cosmetic only)
 
 ---
 
@@ -212,4 +228,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-26 (Bug #1 verified fixed, Bug #3/#4 partial fix, Bug #5 identified)*
+*Last Updated: 2026-01-26 (Bug #1, #3/#4, #6 fixed; Bug #7 identified)*

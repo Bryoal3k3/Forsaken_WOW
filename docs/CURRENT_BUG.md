@@ -1,31 +1,51 @@
 # Current Bug Tracker
 
-## Status: 2 ACTIVE BUGS
+## Status: 3 ACTIVE BUGS
 
 ---
 
-## Bug #1: Bot Falling Through Floor - NEEDS FIX
+## Bug #3: Bots Climbing Steep/Vertical Slopes - NEEDS FIX
 
 **Status**: INVESTIGATING
 
-**Symptom**: Bot "Yenya" fell through the floor and caused infinite pathfinding error spam.
+**Symptom**: Bots walk up steep, nearly vertical slopes trying to reach mobs at the top. They get stuck partway up.
 
 **Error Log**:
 ```
-ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=0 endPoly=3125 for Yenya from (-343.8,-4237.0,62.9) to (-381.5,-4183.2,55.8)
-(repeated infinitely)
+ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=8408 endPoly=0 for Nekkazim from (-697.7,-4175.2,41.5) to (-694.1,-4171.8,41.5)
 ```
 
 **Key Details**:
-- `startPoly=0` means bot's current position has no navmesh polygon (below ground)
-- Bot was visually falling through the floor when observed
-- Location: Durotar area (-343.8, -4237.0, 62.9)
-- Causes infinite spam because bot keeps trying to pathfind every tick
+- `startPoly=8408 endPoly=0` - bot position valid, but DESTINATION has no navmesh
+- Bot physically walks up the slope from the bottom, gets stuck partway
+- Location: Valley of Trials, Durotar (steep hills near Sarkoth area)
+- `MOVE_EXCLUDE_STEEP_SLOPES` flag doesn't prevent this because the mob is selected BEFORE path validation
+- Screenshot shows bot on steep slope with scorpid at top of ridge
+
+**Root Cause**:
+`GrindingStrategy::IsValidGrindTarget()` checks many things but never validates if a PATH exists to the mob. Bot selects mob, then tries to walk directly to it.
 
 **Proposed Fix**:
-1. Detect falling through floor (Z dropping rapidly or no valid startPoly for X consecutive ticks)
-2. Teleport bot to hearthstone location to recover
-3. Rate-limit the error log to prevent spam
+Add path validation in `GrindingStrategy::IsValidGrindTarget()` - use PathFinder to verify mob is reachable before selecting it as a target.
+
+---
+
+## Bug #4: Bots Targeting Mobs in Unreachable Locations - NEEDS FIX
+
+**Status**: INVESTIGATING
+
+**Symptom**: Bots select mobs that require going AROUND terrain (caves, elevated areas, ridges) but try to path directly, getting stuck.
+
+**Key Details**:
+- Related to Bug #3 but distinct - mob IS on valid navmesh, just not directly reachable
+- Example: Sarkoth's cave area in Valley of Trials - requires specific path around hills
+- Bot selects mob within 150 yard range, doesn't check if path exists
+
+**Root Cause**:
+Same as Bug #3 - no path validation before target selection.
+
+**Proposed Fix**:
+Same fix as Bug #3 - add PathFinder validation in `GrindingStrategy::IsValidGrindTarget()`.
 
 ---
 
@@ -73,6 +93,35 @@ ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=0 endPoly=8689 
 ---
 
 ## Recently Fixed (2026-01-25)
+
+### Bot Falling Through Floor - FIXED
+
+**Issue**: Bot "Yenya" fell through the floor causing infinite `startPoly=0` pathfinding error spam.
+
+**Root Cause**: Missing Z-coordinate validation at multiple levels:
+1. Waypoint generation fell back to Z interpolation when `GetHeight()` failed
+2. Grind spots loaded from DB without terrain validation
+3. No recovery mechanism when bot ended up at invalid position
+
+**Fix** (4 parts - defense in depth):
+
+1. **Z validation in `GenerateWaypoints()`** - Try `GetHeight()` with MAX_HEIGHT, then with interpolated Z as reference. Skip waypoint entirely if both fail.
+
+2. **Recovery teleport in `RandomBotAI`** - Track consecutive `PATHFIND_NOPATH` results. After 15 ticks (~15 seconds), teleport bot to hearthstone location.
+
+3. **Z correction on grind spot cache load** - `BuildGrindSpotCache()` now calls `Map::GetHeight()` to correct Z values. Logs summary at startup.
+
+4. **Rate-limited error logging** - `startPoly=0` errors now logged once per 10 seconds per bot (prevents spam).
+
+**Files Modified**:
+- `TravelingStrategy.cpp` - Z validation in waypoints, Z correction on cache load
+- `RandomBotAI.h` - Added `m_invalidPosCount`, `INVALID_POS_THRESHOLD`
+- `RandomBotAI.cpp` - Recovery teleport detection
+- `PathFinder.cpp` - Rate-limited error logging
+
+**Tested**: Recovery teleport working - bots return to starting zone after 15 seconds at invalid position.
+
+---
 
 ### PathFinder Long Path Bug - FIXED
 
@@ -219,4 +268,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-25 (2 new bugs: falling through floor + invalid startPoly during grinding)*
+*Last Updated: 2026-01-25 (Bug #1 fixed, added Bug #3 & #4: steep slopes + unreachable mobs)*

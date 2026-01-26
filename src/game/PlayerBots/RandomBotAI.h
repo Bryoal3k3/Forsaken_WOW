@@ -85,6 +85,10 @@ private:
     bool m_isResting = false;
     uint32 m_restingTickTimer = 0;
 
+    // Invalid position recovery (for falling through floor detection)
+    uint32 m_invalidPosCount = 0;
+    static constexpr uint32 INVALID_POS_THRESHOLD = 15;  // Ticks (seconds) before recovery teleport
+
     // Death handling strategy
     std::unique_ptr<GhostWalkingStrategy> m_ghostStrategy;
 

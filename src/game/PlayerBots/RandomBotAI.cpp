@@ -25,7 +25,9 @@
 #include "Spell.h"
 #include "SpellAuras.h"
 #include "MotionMaster.h"
+#include "PathFinder.h"
 #include "Log.h"
+#include <cmath>
 
 #define RB_UPDATE_INTERVAL 1000
 
@@ -102,6 +104,50 @@ void RandomBotAI::UpdateAI(uint32 const diff)
     {
         me->GetSession()->HandleMoveWorldportAckOpcode();
         return;
+    }
+
+    // Invalid position detection - check if bot has fallen through floor
+    // If position has no valid navmesh for consecutive ticks, teleport to safety
+    {
+        PathFinder path(me);
+        // Try to build a path to a point 5 yards ahead (trivial path)
+        float destX = me->GetPositionX() + 5.0f * std::cos(me->GetOrientation());
+        float destY = me->GetPositionY() + 5.0f * std::sin(me->GetOrientation());
+        float destZ = me->GetPositionZ();
+        path.calculate(destX, destY, destZ, false);  // false = don't use straight line fallback
+
+        // PATHFIND_NOPATH with a trivial destination usually means startPoly=0 (invalid position)
+        if (path.getPathType() & PATHFIND_NOPATH)
+        {
+            ++m_invalidPosCount;
+
+            if (m_invalidPosCount >= INVALID_POS_THRESHOLD)
+            {
+                sLog.Out(LOG_BASIC, LOG_LVL_BASIC,
+                    "[RandomBotAI] %s stuck at invalid position (%.1f, %.1f, %.1f) for %u ticks, teleporting to hearthstone",
+                    me->GetName(), me->GetPositionX(), me->GetPositionY(), me->GetPositionZ(), m_invalidPosCount);
+
+                // Clear movement to prevent further pathfinding attempts
+                me->GetMotionMaster()->Clear(false, true);
+                me->GetMotionMaster()->MoveIdle();
+
+                // Teleport to hearthstone location
+                me->TeleportToHomebind();
+
+                // Reset counter and behaviors
+                m_invalidPosCount = 0;
+                ResetBehaviors();
+                if (m_travelingStrategy)
+                    m_travelingStrategy->ResetArrivalCooldown();
+
+                return;
+            }
+        }
+        else
+        {
+            // Position is valid - reset counter
+            m_invalidPosCount = 0;
+        }
     }
 
     // One-time initialization

@@ -17,6 +17,7 @@
 #include "Database/DatabaseEnv.h"
 #include "ProgressBar.h"
 #include "Map.h"
+#include "MapManager.h"
 #include <cmath>
 #include <cfloat>
 
@@ -86,9 +87,39 @@ void TravelingStrategy::BuildGrindSpotCache()
     }
     while (result->NextRow());
 
+    // Correct Z coordinates using terrain data
+    uint32 correctedCount = 0;
+    for (GrindSpotData& spot : s_grindSpotCache)
+    {
+        // Get the map for this spot (instanceId 0 for continents)
+        Map* map = sMapMgr.FindMap(spot.mapId, 0);
+        if (!map)
+            continue;
+
+        float terrainZ = map->GetHeight(spot.x, spot.y, spot.z + 10.0f);
+        if (terrainZ > INVALID_HEIGHT)
+        {
+            // Check if Z needs correction (more than 1 yard difference)
+            if (std::abs(terrainZ - spot.z) > 1.0f)
+            {
+                spot.z = terrainZ;
+                ++correctedCount;
+            }
+        }
+    }
+
     s_cacheBuilt = true;
-    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Grind spot cache built: %u spots loaded",
-             static_cast<uint32>(s_grindSpotCache.size()));
+
+    if (correctedCount > 0)
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Grind spot cache built: %u spots loaded (%u Z-coordinates corrected)",
+                 static_cast<uint32>(s_grindSpotCache.size()), correctedCount);
+    }
+    else
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, ">> Grind spot cache built: %u spots loaded",
+                 static_cast<uint32>(s_grindSpotCache.size()));
+    }
 }
 
 bool TravelingStrategy::Update(Player* pBot, uint32 /*diff*/)
@@ -419,10 +450,38 @@ void TravelingStrategy::GenerateWaypoints(Player* pBot)
     float dy = m_targetY - startY;
     float totalDist = std::sqrt(dx * dx + dy * dy);
 
+    uint32 skippedWaypoints = 0;
+
     if (totalDist <= WAYPOINT_SEGMENT_DISTANCE)
     {
         // Short distance - single waypoint at destination
-        m_waypoints.push_back(Vector3(m_targetX, m_targetY, m_targetZ));
+        // Validate destination Z before adding
+        if (Map* map = pBot->GetMap())
+        {
+            float validZ = map->GetHeight(m_targetX, m_targetY, MAX_HEIGHT);
+            if (validZ > INVALID_HEIGHT)
+            {
+                m_waypoints.push_back(Vector3(m_targetX, m_targetY, validZ));
+            }
+            else
+            {
+                // Try with target Z as reference
+                validZ = map->GetHeight(m_targetX, m_targetY, m_targetZ + 10.0f);
+                if (validZ > INVALID_HEIGHT)
+                {
+                    m_waypoints.push_back(Vector3(m_targetX, m_targetY, validZ));
+                }
+                else
+                {
+                    // Use target Z as-is (destination from DB should be valid)
+                    m_waypoints.push_back(Vector3(m_targetX, m_targetY, m_targetZ));
+                }
+            }
+        }
+        else
+        {
+            m_waypoints.push_back(Vector3(m_targetX, m_targetY, m_targetZ));
+        }
     }
     else
     {
@@ -434,26 +493,59 @@ void TravelingStrategy::GenerateWaypoints(Player* pBot)
             float t = static_cast<float>(i) / numSegments;
             float wpX = startX + dx * t;
             float wpY = startY + dy * t;
-            float wpZ;
+            float wpZ = INVALID_HEIGHT;
+            bool validZ = false;
 
-            // Get terrain height at this point
             if (Map* map = pBot->GetMap())
             {
+                // First attempt: query with MAX_HEIGHT
                 wpZ = map->GetHeight(wpX, wpY, MAX_HEIGHT);
-                if (wpZ <= INVALID_HEIGHT)
-                    wpZ = startZ + (m_targetZ - startZ) * t;  // Fallback to interpolation
+                if (wpZ > INVALID_HEIGHT)
+                {
+                    validZ = true;
+                }
+                else
+                {
+                    // Second attempt: query with interpolated Z as reference
+                    float refZ = startZ + (m_targetZ - startZ) * t;
+                    wpZ = map->GetHeight(wpX, wpY, refZ + 10.0f);
+                    if (wpZ > INVALID_HEIGHT)
+                    {
+                        validZ = true;
+                    }
+                }
+            }
+
+            if (validZ)
+            {
+                m_waypoints.push_back(Vector3(wpX, wpY, wpZ));
             }
             else
             {
-                wpZ = startZ + (m_targetZ - startZ) * t;
+                ++skippedWaypoints;
+                sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+                    "[TravelingStrategy] %s: Skipping waypoint %u at (%.1f, %.1f) - invalid terrain height",
+                    pBot->GetName(), i, wpX, wpY);
             }
-
-            m_waypoints.push_back(Vector3(wpX, wpY, wpZ));
         }
 
-        // Ensure final waypoint is exact destination
+        // Ensure final waypoint is exact destination (with validated Z)
         if (!m_waypoints.empty())
-            m_waypoints.back() = Vector3(m_targetX, m_targetY, m_targetZ);
+        {
+            if (Map* map = pBot->GetMap())
+            {
+                float destZ = map->GetHeight(m_targetX, m_targetY, MAX_HEIGHT);
+                if (destZ <= INVALID_HEIGHT)
+                    destZ = map->GetHeight(m_targetX, m_targetY, m_targetZ + 10.0f);
+                if (destZ <= INVALID_HEIGHT)
+                    destZ = m_targetZ;  // Fallback to DB value
+                m_waypoints.back() = Vector3(m_targetX, m_targetY, destZ);
+            }
+            else
+            {
+                m_waypoints.back() = Vector3(m_targetX, m_targetY, m_targetZ);
+            }
+        }
     }
 
     // TESTING: Commented out to isolate PathFinder issue
@@ -462,9 +554,18 @@ void TravelingStrategy::GenerateWaypoints(Player* pBot)
 
     m_waypointsGenerated = true;
 
-    sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
-        "[TravelingStrategy] %s: Generated %zu waypoints for %.0f yard journey",
-        pBot->GetName(), m_waypoints.size(), totalDist);
+    if (skippedWaypoints > 0)
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+            "[TravelingStrategy] %s: Generated %zu waypoints for %.0f yard journey (skipped %u invalid)",
+            pBot->GetName(), m_waypoints.size(), totalDist, skippedWaypoints);
+    }
+    else
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+            "[TravelingStrategy] %s: Generated %zu waypoints for %.0f yard journey",
+            pBot->GetName(), m_waypoints.size(), totalDist);
+    }
 }
 
 void TravelingStrategy::MoveToCurrentWaypoint(Player* pBot)

@@ -27,6 +27,12 @@
 #include "Geometry.h"
 
 #include "Detour/Include/DetourCommon.h"
+#include "World.h"  // For WorldTimer
+#include <map>
+
+// Rate limiting for bot pathfinding errors (10 seconds per bot)
+static std::map<uint32, uint32> s_botInvalidPolyLastLog;
+static constexpr uint32 INVALID_POLY_LOG_INTERVAL_MS = 10000;
 
 // Helper: Returns true if this unit is a player bot (for debug logging)
 static inline bool IsPlayerBot(Unit const* unit)
@@ -227,11 +233,21 @@ void PathInfo::BuildPolyPath(Vector3 const& startPos, Vector3 const& endPos)
     {
         if (IsPlayerBot(m_sourceUnit))
         {
-            sLog.Out(LOG_BASIC, LOG_LVL_ERROR,
-                "[BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=%u endPoly=%u for %s "
-                "from (%.1f,%.1f,%.1f) to (%.1f,%.1f,%.1f)",
-                startPoly, endPoly, m_sourceUnit->GetName(),
-                startPos.x, startPos.y, startPos.z, endPos.x, endPos.y, endPos.z);
+            // Rate-limit error logging (10 seconds per bot)
+            uint32 botGuid = m_sourceUnit->GetGUIDLow();
+            uint32 currentTime = WorldTimer::getMSTime();
+            auto it = s_botInvalidPolyLastLog.find(botGuid);
+
+            if (it == s_botInvalidPolyLastLog.end() ||
+                WorldTimer::getMSTimeDiff(it->second, currentTime) >= INVALID_POLY_LOG_INTERVAL_MS)
+            {
+                sLog.Out(LOG_BASIC, LOG_LVL_ERROR,
+                    "[BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=%u endPoly=%u for %s "
+                    "from (%.1f,%.1f,%.1f) to (%.1f,%.1f,%.1f)",
+                    startPoly, endPoly, m_sourceUnit->GetName(),
+                    startPos.x, startPos.y, startPos.z, endPos.x, endPos.y, endPos.z);
+                s_botInvalidPolyLastLog[botGuid] = currentTime;
+            }
         }
         BuildShortcut();
         // Check for swimming or flying shortcut

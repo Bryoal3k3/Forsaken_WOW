@@ -95,8 +95,8 @@ src/game/PlayerBots/
 | Class Type | Engagement Behavior |
 |------------|---------------------|
 | **Melee** (Warrior, Rogue, Paladin, Shaman, Druid) | `Attack()` + `MoveChase()` |
-| **Caster** (Mage, Priest, Warlock) | `SetTargetGuid()` only - first spell pulls |
-| **Hunter** | Auto Shot at 25 yard range |
+| **Caster** (Mage, Priest, Warlock) | `MoveChase(28.0f)` to get in range, then cast to pull |
+| **Hunter** | Auto Shot at 25 yard range, melee fallback when mobs close in |
 
 ---
 
@@ -111,7 +111,7 @@ src/game/PlayerBots/
 | `PlayerBotMgr.cpp` | Bot spawning, loading, lifecycle |
 | `CombatBotBaseAI.cpp` | Combat utilities (spell casting, targeting, spell data) |
 | `PartyBotAI.cpp` | Working bot example - study for patterns |
-| `PlayerBotAI.cpp:361-377` | `CreatePlayerBotAI()` - register new AI types here |
+| `PlayerBotAI.cpp` | `CreatePlayerBotAI()` - register new AI types here |
 | `DangerZoneCache.cpp` | Shared danger zone cache (currently disabled, for future threat avoidance) |
 
 ### Core vMangos Files Modified
@@ -119,6 +119,10 @@ src/game/PlayerBots/
 | File | Modification |
 |------|--------------|
 | `src/game/Maps/PathFinder.cpp` | Fixed long path bug + added bot-only debug logging |
+| `src/game/Player.cpp` | SaveToDB preserves real account ID for bots (not session ID) |
+| `src/game/Handlers/CharacterHandler.cpp` | Skip intro cinematic for bots (IsBot() check) |
+| `src/game/ObjectAccessor.cpp` | Normalize names for bot registration (fixes whispers) |
+| `src/game/ObjectMgr.cpp` | ReloadCharacterGuids() + title case for generated names |
 
 ---
 
@@ -218,21 +222,17 @@ mysql -u mangos -pmangos realmd      # Accounts DB (RNDBOT accounts)
 
 ## Known Issues & Fixes Applied
 
-### PathFinder Long Path Bug (FIXED 2026-01-25)
+See `docs/CURRENT_BUG.md` for detailed bug tracking and fix history.
 
-**Problem**: Long-distance paths (>256 waypoints) failed with `PATHFIND_NOPATH` even though the path existed.
+**Major Fixes Applied:**
+- PathFinder long path bug (truncated paths now return INCOMPLETE, not NOPATH)
+- Movement sync bug (waypoint segmentation for long-distance travel)
+- Combat facing bug (bots face target before attacking)
+- Tree collision (re-extracted vmaps/mmaps from clean 1.12 client)
 
-**Root Cause**: `PathFinder.cpp:findSmoothPath()` returned `DT_FAILURE` when the 256-point buffer filled up, instead of `DT_SUCCESS | DT_BUFFER_TOO_SMALL`.
-
-**Fix Applied**:
-1. Changed `findSmoothPath()` to return `DT_SUCCESS | DT_BUFFER_TOO_SMALL` for truncated paths
-2. Added handling in `BuildPointPath()` to mark truncated paths as `PATHFIND_INCOMPLETE`
-
-**Debug Logging**: Bot-only PathFinder logging added (filtered by `IsPlayerBot()` helper). Logs prefixed with `[BOT]`.
-
-### Active Bugs (See docs/CURRENT_BUG.md)
+**Active Bugs:**
 - Bot falling through floor (needs HS teleport recovery)
-- Invalid startPoly during normal grinding (navmesh edge cases)
+- Invalid startPoly during normal grinding (navmesh edge cases in Durotar)
 
 ---
 

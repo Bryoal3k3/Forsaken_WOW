@@ -14,6 +14,7 @@
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "CellImpl.h"
+#include "PathFinder.h"
 
 // Checker that finds the nearest valid grind target in a single pass.
 // Used with CreatureLastSearcher - accepts creature only if it's closer than current best.
@@ -173,6 +174,14 @@ bool GrindingStrategy::IsValidGrindTarget(Player* pBot, Creature* pCreature) con
 
     // Additional safety: make sure it's not friendly faction
     if (pBot->IsFriendlyTo(pCreature))
+        return false;
+
+    // Reachability check: verify mob's position is on valid navmesh
+    // This prevents targeting mobs on steep slopes or unreachable terrain
+    // PathFinder does a quick poly lookup first - if endPoly=0, returns NOPATH immediately
+    PathFinder path(pBot);
+    path.calculate(pCreature->GetPositionX(), pCreature->GetPositionY(), pCreature->GetPositionZ(), false);
+    if (path.getPathType() & PATHFIND_NOPATH)
         return false;
 
     return true;

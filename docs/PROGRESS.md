@@ -30,7 +30,7 @@ All Phase 5 bugs have been fixed:
 ### Current Active Bugs (See docs/CURRENT_BUG.md)
 - ✅ All major bugs fixed (2026-01-26)
 - ✅ Bug #9: Bots now enter caves/buildings to fight mobs (2026-01-26)
-- 🟡 Low priority: Invalid startPoly edge cases (handled by recovery system)
+- ✅ Bug #2: Bots no longer walk onto steep slopes (2026-01-26)
 - 🟡 Low priority: BuildPointPath log spam for short paths (cosmetic only)
 - 🟡 Low priority: Combat reactivity - bot ignores attackers while moving
 
@@ -78,6 +78,31 @@ Bots would target mobs inside caves and buildings but stand outside instead of p
 
 ### Result
 Bots now properly path through cave entrances and building doors to reach and kill mobs inside.
+
+---
+
+## 2026-01-26 - BUG FIX: Bots Walking Onto Steep Slopes (Bug #2)
+
+### Problem
+Bots were walking onto steep slopes (terrain with no navmesh) and getting `startPoly=0` pathfinding errors. They would try to chase mobs by going OVER hills instead of around them, ending up stuck on slopes.
+
+### Root Cause
+`ChaseMovementGenerator` and `FollowMovementGenerator` in `TargetedMovementGenerator.cpp` did not call `ExcludeSteepSlopes()` for player bots. When calculating chase paths, steep terrain was included, leading bots onto no-navmesh areas.
+
+### Solution
+Added steep slope exclusion specifically for bots (not NPCs - they can walk on slopes):
+```cpp
+// Bots should not path through steep slopes (players can't walk on them)
+if (owner.IsPlayer() && ((Player const*)&owner)->IsBot())
+    path.ExcludeSteepSlopes();
+```
+
+### Files Modified
+- `TargetedMovementGenerator.cpp` - Added `ExcludeSteepSlopes()` for bots in both ChaseMovementGenerator and FollowMovementGenerator
+- `PathFinder.cpp` - Enhanced logging for remaining edge cases (Map, Zone, Area, dist, moving, inCombat)
+
+### Result
+Bots now path around steep hills like real players would. A bot in Durotar was observed running all the way around the orc starter zone to reach a scorpid on a hill, rather than trying to climb over. Mobs/NPCs still climb hills normally (unchanged).
 
 ---
 
@@ -762,4 +787,4 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 *Last Updated: 2026-01-26*
-*Current State: Phase 5 complete. All major bugs fixed. Bots now enter caves/buildings to fight mobs inside.*
+*Current State: Phase 5 complete. All major bugs fixed. Bots path around steep terrain and enter caves/buildings.*

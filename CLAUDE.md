@@ -234,10 +234,11 @@ See `docs/CURRENT_BUG.md` for detailed bug tracking and fix history.
 - Bot falling through floor (Z validation + recovery teleport)
 - Unreachable mob targeting (reachability check rejects PATHFIND_NOT_USING_PATH)
 - Overly aggressive stuck protection (changed to Map::GetHeight() based detection)
+- Bots walking onto steep slopes (ExcludeSteepSlopes() for bots in ChaseMovementGenerator)
 
 **Active Bugs (Low Priority):**
-- Invalid startPoly edge cases (handled by recovery system)
 - BuildPointPath log spam for short paths (cosmetic only)
+- Combat reactivity - bot ignores attackers while moving to target
 
 ---
 
@@ -254,4 +255,4 @@ To enable: Uncomment the danger zone code in `RandomBotAI.cpp:UpdateOutOfCombatA
 
 ---
 
-*Last Updated: 2026-01-26 (Bug #9 fix - bots enter caves/buildings)*
+*Last Updated: 2026-01-26 (Bug #2 fix - bots path around steep slopes)*

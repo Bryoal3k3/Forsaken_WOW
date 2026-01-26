@@ -241,11 +241,19 @@ void PathInfo::BuildPolyPath(Vector3 const& startPos, Vector3 const& endPos)
             if (it == s_botInvalidPolyLastLog.end() ||
                 WorldTimer::getMSTimeDiff(it->second, currentTime) >= INVALID_POLY_LOG_INTERVAL_MS)
             {
+                // Calculate distance to destination for logging
+                float dx = endPos.x - startPos.x;
+                float dy = endPos.y - startPos.y;
+                float dz = endPos.z - startPos.z;
+                float dist = sqrt(dx*dx + dy*dy + dz*dz);
+
                 sLog.Out(LOG_BASIC, LOG_LVL_ERROR,
                     "[BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=%u endPoly=%u for %s "
-                    "from (%.1f,%.1f,%.1f) to (%.1f,%.1f,%.1f)",
+                    "from (%.1f,%.1f,%.1f) to (%.1f,%.1f,%.1f) | Map=%u Zone=%u Area=%u dist=%.1f moving=%d inCombat=%d",
                     startPoly, endPoly, m_sourceUnit->GetName(),
-                    startPos.x, startPos.y, startPos.z, endPos.x, endPos.y, endPos.z);
+                    startPos.x, startPos.y, startPos.z, endPos.x, endPos.y, endPos.z,
+                    m_sourceUnit->GetMapId(), m_sourceUnit->GetZoneId(), m_sourceUnit->GetAreaId(),
+                    dist, m_sourceUnit->IsMoving() ? 1 : 0, m_sourceUnit->IsInCombat() ? 1 : 0);
                 s_botInvalidPolyLastLog[botGuid] = currentTime;
             }
         }

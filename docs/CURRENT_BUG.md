@@ -1,6 +1,6 @@
 # Current Bug Tracker
 
-## Status: 2 ACTIVE BUGS (Low Priority)
+## Status: 2 ACTIVE BUGS (Low Priority - Cosmetic/Minor)
 
 ---
 
@@ -61,24 +61,26 @@ When `pointCount=1` (trivially short path), this triggers even though `dtResult=
 
 ---
 
-## Bug #2: Invalid StartPoly During Normal Grinding - LOW PRIORITY
+## Bug #2: Bots Walking Onto Steep Slopes - FIXED
 
-**Status**: INVESTIGATING (Low Priority - handled by recovery system)
+**Status**: ✅ FIXED (2026-01-26)
 
-**Symptom**: Bots getting `startPoly=0` errors while grinding normally (NOT falling).
+**Symptom**: Bots getting `startPoly=0` errors while grinding - they walked onto steep slopes (no navmesh) trying to reach mobs.
 
-**Error Log**:
+**Root Cause**: `ChaseMovementGenerator` and `FollowMovementGenerator` did not exclude steep slopes from pathfinding. When a bot chased a mob on the other side of a hill, the path went OVER the hill instead of around it, leading the bot onto terrain with no navmesh.
+
+**Fix**: Added `ExcludeSteepSlopes()` for bots in `TargetedMovementGenerator.cpp`:
+```cpp
+// Bots should not path through steep slopes (players can't walk on them)
+if (owner.IsPlayer() && ((Player const*)&owner)->IsBot())
+    path.ExcludeSteepSlopes();
 ```
-ERROR: [BOT] PathFinder::BuildPolyPath: Invalid poly - startPoly=0 endPoly=8689 for Burarka from (-772.6,-4249.8,57.7) to (-792.0,-4284.0,56.5)
-```
 
-**Key Details**:
-- `startPoly=0` but `endPoly=8689` means destination valid, current position is not
-- Z values increasing (walking UP a slope, not falling)
-- Location: Durotar area (-772, -4249)
-- Possibly navmesh edge case at polygon boundaries
+**Files Modified**:
+- `TargetedMovementGenerator.cpp` - Added steep slope exclusion for bots in Chase and Follow generators
+- `PathFinder.cpp` - Enhanced logging (Map, Zone, Area, dist, moving, inCombat) for remaining edge cases
 
-**Note**: Recovery teleport handles this case - bot teleports after 15 seconds if truly stuck.
+**Result**: Bots now path around steep hills like real players would. Mobs still climb hills normally (unchanged).
 
 ---
 
@@ -238,9 +240,11 @@ if ((type & PATHFIND_NOPATH) || (type & PATHFIND_NOT_USING_PATH))
 5. Fixed Bug #7 (LoS issue with mobs inside buildings) - initial LoS check for ranged classes
 6. Identified Bug #8 (combat reactivity) - bot ignores attackers while moving to target
 7. **Fixed Bug #9 (cave/building targeting)** - Supersedes Bug #7 with proper movement-based solution
+8. **Fixed Bug #2 (steep slope pathfinding)** - Added ExcludeSteepSlopes() for bots in ChaseMovementGenerator
 
 ### Bugs Fixed This Session
 - Bug #1: Bot falling through floor ✅
+- Bug #2: Bots walking onto steep slopes ✅
 - Bug #3 & #4: Unreachable mobs ✅
 - Bug #6: Aggressive stuck protection ✅
 - Bug #7: Casters targeting mobs without LoS ✅ (superseded by #9)
@@ -248,7 +252,6 @@ if ((type & PATHFIND_NOPATH) || (type & PATHFIND_NOT_USING_PATH))
 
 ### Remaining
 - Bug #8: Combat reactivity - bot ignores attackers (Low Priority)
-- Bug #2: Invalid startPoly edge cases (Low Priority - handled by recovery)
 - Bug #5: BuildPointPath log spam (Low Priority - cosmetic only)
 
 ---
@@ -263,4 +266,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-26 (Bug #9 fixed - bots now enter caves/buildings to fight)*
+*Last Updated: 2026-01-26 (Bug #2 fixed - bots now path around steep slopes)*

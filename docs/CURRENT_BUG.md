@@ -1,6 +1,31 @@
 # Current Bug Tracker
 
-## Status: 2 ACTIVE BUGS (Low Priority - Cosmetic/Minor)
+## Status: 1 ACTIVE BUG (Low Priority)
+
+---
+
+## Bug #11: Bots Not Looting or Buffing - FIXED
+
+**Status**: ✅ FIXED (2026-01-26)
+
+**Symptom**: After killing a mob, bots immediately target the next mob without:
+- Looting the corpse
+- Casting self-buffs (Ice Armor, Demon Skin, Seal of Righteousness, etc.)
+
+**Root Causes**:
+1. **Buffing**: `UpdateOutOfCombat()` was called AFTER grinding, so never reached when targets were plentiful
+2. **Looting**: `GetVictim()` returned dead mob, keeping bot in combat branch and skipping looting
+3. **Flow**: Bot never properly exited combat state after kill
+
+**Fixes Applied**:
+1. Moved `m_combatMgr->UpdateOutOfCombat(me)` BEFORE grinding in `UpdateOutOfCombatAI()`
+2. Added `AttackStop()` call when victim dies and no new attacker found
+3. This allows proper exit from combat branch → looting runs → buffs checked → then find target
+
+**Files Modified**:
+- `RandomBotAI.cpp` - Reordered buff call, added AttackStop() for dead victims
+
+**Tested 2026-01-26**: Bots now loot corpses (gold + items) and maintain self-buffs.
 
 ---
 
@@ -32,32 +57,6 @@
 - `Unit::GetAttackers()` - List of units attacking this unit
 
 ---
-
-## Bug #5: BuildPointPath FAILED Spam for Short Paths - LOW PRIORITY
-
-**Status**: INVESTIGATING (Low Priority - cosmetic log spam only)
-
-**Symptom**: Console spam when bots try to path to very close targets:
-```
-ERROR: [BOT] PathFinder::BuildPointPath Jamxi: FAILED result=0x40000000 pointCount=1 polyLength=1 - returning NOPATH
-```
-
-**Key Details**:
-- `result=0x40000000` = `DT_SUCCESS` (NOT a failure!)
-- `pointCount=1, polyLength=1` = trivially short path (bot and target in same/adjacent polygon)
-- Code incorrectly treats this as NOPATH
-
-**Root Cause**:
-In `PathFinder.cpp` line 525:
-```cpp
-if (pointCount < 2 || dtStatusFailed(dtResult))
-```
-
-When `pointCount=1` (trivially short path), this triggers even though `dtResult=DT_SUCCESS`.
-
-**Impact**: Log spam only - nearby valid mobs are still engaged correctly due to the reachability check handling this case.
-
-**Proposed Fix**: Change condition to only fail when `dtStatusFailed(dtResult)` is true, not when path is just short.
 
 ---
 
@@ -103,6 +102,54 @@ if (owner.IsPlayer() && ((Player const*)&owner)->IsBot())
 ---
 
 ## Recently Fixed (2026-01-26)
+
+### Bug #10: Casters Not Moving Into Range - FIXED
+
+**Status**: ✅ FIXED (2026-01-26)
+
+**Symptom**: Caster bots (Mage, Priest, Warlock) would target mobs but stand at 35+ yards without casting. They were stuck out of spell range (30 yards for most spells) and never moved closer.
+
+**Root Cause**: `HandleRangedMovement()` in `CombatHelpers.h` only handled two cases:
+1. In range but no LoS → move closer
+2. In range with LoS → stop moving
+
+It did NOT handle the case where the bot was OUT of cast range and needed to move closer.
+
+**Fix**: Added a third case to `HandleRangedMovement()`:
+```cpp
+// If OUT of cast range, move to casting distance
+if (!inCastRange && !pBot->IsMoving())
+{
+    pBot->GetMotionMaster()->MoveChase(pVictim, 28.0f);
+    return;
+}
+```
+
+**Files Modified**:
+- `CombatHelpers.h` - Added out-of-range movement handling
+
+**Also Fixed This Session**:
+- Hunter Auto Shot spam (Spell 75 cooldown error) - Added check for `CURRENT_AUTOREPEAT_SPELL` before casting
+
+---
+
+### Bug #5: BuildPointPath FAILED Spam for Short Paths - FIXED
+
+**Status**: ✅ FIXED (2026-01-26)
+
+**Symptom**: Console spam when bots tried to path to very close targets:
+```
+ERROR: [BOT] PathFinder::BuildPointPath Jamxi: FAILED result=0x40000000 pointCount=1 polyLength=1 - returning NOPATH
+```
+
+**Root Cause**: In `PathFinder.cpp`, the condition `if (pointCount < 2 || dtStatusFailed(dtResult))` treated trivially short paths (bot already at target) as failures, even when `dtResult=DT_SUCCESS`.
+
+**Fix**: Separated the two conditions - only return NOPATH when `dtStatusFailed(dtResult)` is true. When `pointCount < 2` but dtResult succeeded, build a shortcut path and keep the existing PATHFIND_NORMAL type.
+
+**Files Modified**:
+- `PathFinder.cpp` - Split condition into two separate checks
+
+---
 
 ### Bug #9: Bots Not Entering Caves/Buildings to Fight Mobs - FIXED
 
@@ -241,18 +288,23 @@ if ((type & PATHFIND_NOPATH) || (type & PATHFIND_NOT_USING_PATH))
 6. Identified Bug #8 (combat reactivity) - bot ignores attackers while moving to target
 7. **Fixed Bug #9 (cave/building targeting)** - Supersedes Bug #7 with proper movement-based solution
 8. **Fixed Bug #2 (steep slope pathfinding)** - Added ExcludeSteepSlopes() for bots in ChaseMovementGenerator
+9. **Fixed Bug #5 (BuildPointPath spam)** - Split pointCount < 2 check from dtStatusFailed check
+10. **Fixed Bug #10 (casters not moving into range)** - Added out-of-range handling to HandleRangedMovement
+11. **Fixed Hunter Auto Shot spam** - Check CURRENT_AUTOREPEAT_SPELL before casting
 
 ### Bugs Fixed This Session
 - Bug #1: Bot falling through floor ✅
 - Bug #2: Bots walking onto steep slopes ✅
 - Bug #3 & #4: Unreachable mobs ✅
+- Bug #5: BuildPointPath log spam ✅
 - Bug #6: Aggressive stuck protection ✅
 - Bug #7: Casters targeting mobs without LoS ✅ (superseded by #9)
 - Bug #9: Bots not entering caves/buildings ✅
+- Bug #10: Casters not moving into range ✅
+- Hunter Auto Shot spam ✅
 
 ### Remaining
 - Bug #8: Combat reactivity - bot ignores attackers (Low Priority)
-- Bug #5: BuildPointPath log spam (Low Priority - cosmetic only)
 
 ---
 
@@ -266,4 +318,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-26 (Bug #2 fixed - bots now path around steep slopes)*
+*Last Updated: 2026-01-26 (Bug #10 fixed - casters now move into casting range)*

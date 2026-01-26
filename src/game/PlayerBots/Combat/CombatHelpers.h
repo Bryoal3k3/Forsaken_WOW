@@ -75,7 +75,14 @@ namespace CombatHelpers
         bool inCastRange = dist <= castRange;
         bool hasLoS = pBot->IsWithinLOSInMap(pVictim);
 
-        // If at range but NO line of sight, move closer (through doors/cave entrances)
+        // If OUT of cast range, move to casting distance
+        if (!inCastRange && !pBot->IsMoving())
+        {
+            pBot->GetMotionMaster()->MoveChase(pVictim, 28.0f);
+            return;
+        }
+
+        // If at range but NO line of sight, move all the way (through doors/cave entrances)
         if (inCastRange && !hasLoS && !pBot->IsMoving())
         {
             pBot->GetMotionMaster()->MoveChase(pVictim);

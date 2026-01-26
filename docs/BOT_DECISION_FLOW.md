@@ -16,6 +16,11 @@ UpdateAI(diff)
 │         └── Spirit healer if death loop (3 deaths/10min) │
 │         RETURN                                           │
 │                                                          │
+├── [COMBAT ENDED?] ──────────────────────────────────────┤
+│   (wasInCombat && !inCombat)                             │
+│   YES → LootingBehavior::OnCombatEnded()                 │
+│         └── Enable looting mode for next tick            │
+│                                                          │
 ├── [RESTING?] ────────────────────────────────────────────┤
 │   YES → BotCheats::HandleResting()                       │
 │         ├── Sit and regen 5% HP/mana per 2 sec           │
@@ -24,6 +29,7 @@ UpdateAI(diff)
 │                                                          │
 ├── [IN COMBAT or HAS VICTIM?] ────────────────────────────┤
 │   YES → UpdateInCombatAI()                               │
+│         ├── If victim dead + no attackers → AttackStop() │
 │         └── BotCombatMgr::UpdateCombat()                 │
 │             └── Class handler rotation                   │
 │         RETURN                                           │
@@ -39,14 +45,16 @@ UpdateAI(diff)
     │   └── Bags 100% full OR gear broken → vendor
     │       RETURN if busy
     │
+    ├── BotCombatMgr::UpdateOutOfCombat()   ← BUFFS FIRST!
+    │   └── Apply self-buffs (Ice Armor, etc.)
+    │
     ├── GrindingStrategy::UpdateGrinding()
     │   ├── ENGAGED → Found mob, attacking → RETURN
     │   └── NO_TARGETS (5x consecutive) → TravelingStrategy
     │       └── Find new grind spot, travel there
     │           RETURN if busy
     │
-    └── BotCombatMgr::UpdateOutOfCombat()
-        └── Apply self-buffs
+    └── (end of out-of-combat loop)
 ```
 
 ---
@@ -58,10 +66,11 @@ UpdateAI(diff)
 | 1 | **GhostWalking** | Bot is dead |
 | 2 | **Resting** | HP < 35% OR mana < 45% |
 | 3 | **Combat** | In combat OR has attack victim |
-| 4 | **Looting** | Recently killed mobs with loot nearby |
+| 4 | **Looting** | Combat just ended, lootable corpses nearby |
 | 5 | **Vendoring** | Bags 100% full OR gear 0% durability |
-| 6 | **Traveling** | No valid mobs for 5 consecutive ticks |
-| 7 | **Grinding** | Default - find and kill mobs |
+| 6 | **Buffing** | Missing self-buffs (Ice Armor, Demon Skin, etc.) |
+| 7 | **Traveling** | No valid mobs for 5 consecutive ticks |
+| 8 | **Grinding** | Default - find and kill mobs |
 
 ---
 
@@ -157,8 +166,9 @@ if (grindResult == NO_TARGETS && noMobsCount >= 5)
 
 | Type | Behavior | When It Runs |
 |------|----------|--------------|
-| **Universal** | LootingBehavior | After combat ends, before strategies |
+| **Universal** | LootingBehavior | After combat ends, before other strategies |
 | **Universal** | Combat response | Always responds to attackers |
+| **Universal** | Buffing | Before grinding, maintains self-buffs |
 | **Strategy** | GrindingStrategy | Default out-of-combat behavior |
 | **Strategy** | VendoringStrategy | When bags full / gear broken |
 | **Strategy** | TravelingStrategy | When area has no valid mobs |
@@ -183,7 +193,10 @@ In Combat → Out of Combat
 ├── Bot died
 └── All threats evaded (rare)
 
-On exit: LootingBehavior::OnCombatEnded() queues nearby corpses
+On exit:
+├── LootingBehavior::OnCombatEnded() enables looting mode
+└── UpdateInCombatAI() calls AttackStop() when victim dead + no attackers
+    └── This clears GetVictim() so bot exits combat branch properly
 ```
 
 ### Resting Entry/Exit
@@ -333,4 +346,4 @@ TravelingStrategy::StartTravel()
 
 ---
 
-*Last Updated: 2026-01-25 (PathFinder debug logging + long path fix)*
+*Last Updated: 2026-01-26 (Bug #11 fix - buffing before grinding, AttackStop() for proper combat exit)*

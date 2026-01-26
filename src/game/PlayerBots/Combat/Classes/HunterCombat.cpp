@@ -79,8 +79,9 @@ void HunterCombat::UpdateCombat(Player* pBot, Unit* pVictim)
 
     // --- Ranged Combat (outside deadzone) ---
 
-    // Maintain Auto Shot
+    // Maintain Auto Shot (only start if not already auto-shooting)
     if (pBot->HasSpell(SPELL_AUTO_SHOT) &&
+        !pBot->GetCurrentSpell(CURRENT_AUTOREPEAT_SPELL) &&
         !pBot->IsMoving() &&
         !pBot->IsNonMeleeSpellCasted())
     {

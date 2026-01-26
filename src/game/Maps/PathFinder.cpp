@@ -529,11 +529,9 @@ void PathInfo::BuildPointPath(float const* startPoint, float const* endPoint, fl
             m_sourceUnit->GetName(), dtResult, pointCount);
     }
 
-    // Check for true failure (not just buffer overflow with valid points)
-    if (pointCount < 2 || dtStatusFailed(dtResult))
+    // True pathfinding failure
+    if (dtStatusFailed(dtResult))
     {
-        // only happens if pass bad data to findStraightPath or navmesh is broken
-        // single point paths can be generated here
         if (IsPlayerBot(m_sourceUnit))
         {
             sLog.Out(LOG_BASIC, LOG_LVL_ERROR,
@@ -542,6 +540,14 @@ void PathInfo::BuildPointPath(float const* startPoint, float const* endPoint, fl
         }
         BuildShortcut();
         m_type = PATHFIND_NOPATH;
+        return;
+    }
+
+    // Trivially short path (same/adjacent polygon) - valid, not failure
+    if (pointCount < 2)
+    {
+        BuildShortcut();
+        // m_type already set to PATHFIND_NORMAL from earlier - keep it
         return;
     }
 

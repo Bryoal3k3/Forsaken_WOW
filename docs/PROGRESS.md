@@ -31,8 +31,9 @@ All Phase 5 bugs have been fixed:
 - ✅ All major bugs fixed (2026-01-26)
 - ✅ Bug #9: Bots now enter caves/buildings to fight mobs (2026-01-26)
 - ✅ Bug #2: Bots no longer walk onto steep slopes (2026-01-26)
-- 🟡 Low priority: BuildPointPath log spam for short paths (cosmetic only)
-- 🟡 Low priority: Combat reactivity - bot ignores attackers while moving
+- ✅ Bug #5: BuildPointPath log spam fixed (2026-01-26)
+- ✅ Bug #11: Bots now properly loot and buff (2026-01-26)
+- 🟡 Low priority: Combat reactivity - bot ignores attackers while moving (Bug #8)
 
 ---
 
@@ -53,6 +54,35 @@ A reactive danger zone cache was implemented for threat avoidance during travel 
 **To Enable:** Uncomment code in:
 - `RandomBotAI.cpp:UpdateOutOfCombatAI()` - ReportDanger call
 - `TravelingStrategy.cpp:GenerateWaypoints()` - FilterWaypointsForDanger call
+
+---
+
+## 2026-01-26 - BUG FIX: Bots Not Looting or Buffing (Bug #11)
+
+### Problem
+Bots were "animalistic killing machines" - immediately targeting the next mob after a kill without looting corpses or casting self-buffs (Ice Armor, Demon Skin, Seal of Righteousness, etc.).
+
+### Root Causes (Two Issues)
+1. **Buffing**: `UpdateOutOfCombat()` (buff logic) was called AFTER `GrindingStrategy::UpdateGrinding()`. Since grinding always found and engaged a target, the function returned before reaching the buff code.
+
+2. **Looting**: `GetVictim()` returned the dead mob after combat ended. The check `if (inCombat || me->GetVictim())` kept bots in the combat branch, preventing the looting code from running.
+
+### Solution (Two Parts)
+1. **Moved buff check BEFORE grinding** in `UpdateOutOfCombatAI()` - buffs are now applied before looking for the next target
+
+2. **Added `AttackStop()` call** in `UpdateInCombatAI()` when victim is dead and no new attacker found - this clears `GetVictim()` so the bot properly exits the combat branch
+
+### Files Modified
+- `RandomBotAI.cpp` - Reordered buff call, added AttackStop() for dead victims
+
+### New Flow
+```
+Kill mob → AttackStop() clears victim → Exit combat branch →
+Looting runs → Buffs checked → Then find next target
+```
+
+### Result
+Bots now properly loot corpses (gold + items) and maintain self-buffs between fights.
 
 ---
 
@@ -336,7 +366,7 @@ if (IsBot())
 1. Auto-generate on first server launch (accounts + characters)
 2. Spawn in the world without GUID conflicts
 3. Be whispered by players (properly registered in ObjectAccessor)
-4. Apply self-buffs when out of combat
+4. **Maintain self-buffs** (Ice Armor, Demon Skin, Seal of Righteousness, etc.) - checked before each fight
 5. Fight back when attacked (class-appropriate combat rotations)
 6. **Engage targets appropriately by class:**
    - Melee classes (Warrior, Rogue, Paladin, Shaman, Druid) charge in
@@ -787,4 +817,4 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 *Last Updated: 2026-01-26*
-*Current State: Phase 5 complete. All major bugs fixed. Bots path around steep terrain and enter caves/buildings.*
+*Current State: Phase 5 complete. All major bugs fixed. Bots loot, buff, path around steep terrain, and enter caves/buildings.*

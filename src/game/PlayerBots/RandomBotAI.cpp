@@ -269,6 +269,13 @@ void RandomBotAI::UpdateInCombatAI()
                 pVictim = pAttacker;
             }
         }
+
+        // No new target found - clear the dead victim so we exit combat branch
+        if (!pVictim || pVictim->IsDead())
+        {
+            me->AttackStop();
+            return;
+        }
     }
 
     if (!pVictim)
@@ -324,6 +331,10 @@ void RandomBotAI::UpdateOutOfCombatAI()
     if (m_vendoringStrategy && m_vendoringStrategy->Update(me, RB_UPDATE_INTERVAL))
         return;  // Busy vendoring
 
+    // Check buffs BEFORE looking for targets
+    // This ensures bots maintain buffs even when targets are plentiful
+    m_combatMgr->UpdateOutOfCombat(me);
+
     // Get grinding strategy for explicit result handling
     GrindingStrategy* pGrinding = static_cast<GrindingStrategy*>(m_strategy.get());
     if (pGrinding)
@@ -354,8 +365,6 @@ void RandomBotAI::UpdateOutOfCombatAI()
         }
     }
 
-    // Delegate out of combat (buffs, etc.) to combat manager
-    m_combatMgr->UpdateOutOfCombat(me);
 }
 
 // ============================================================================

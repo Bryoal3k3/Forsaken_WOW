@@ -95,8 +95,8 @@ src/game/PlayerBots/
 | Class Type | Engagement Behavior |
 |------------|---------------------|
 | **Melee** (Warrior, Rogue, Paladin, Shaman, Druid) | `Attack()` + `MoveChase()` + `HandleMeleeMovement()` ensures chase persists |
-| **Caster** (Mage, Priest, Warlock) | `MoveChase(28.0f)` to get in range, `HandleRangedMovement()` moves closer if no LoS |
-| **Hunter** | Auto Shot at 25 yard range, melee fallback when mobs close in |
+| **Caster** (Mage, Priest, Warlock) | `MoveChase()` + `HandleRangedMovement()` stops at 30 yards when LoS exists |
+| **Hunter** | Auto Shot at range, `HandleRangedMovement()`, melee fallback when mobs close in |
 
 **Note**: All classes can now enter caves/buildings - if they can't see the target at their preferred range, they move closer through entrances.
 
@@ -221,6 +221,10 @@ mysql -u mangos -pmangos realmd      # Accounts DB (RNDBOT accounts)
 | `RandomBot.MaxBots` | Number of bots to generate |
 | `RandomBot.MinBots` | Minimum bots online |
 | `RandomBot.Refresh` | Add/remove interval (ms) |
+| `RandomBot.DebugGrindSelection` | Log grind spot selection to console |
+
+### Debug Tools
+- **`.bot status`** - Target a bot to see: level, class, HP/mana, position, action, strategy, victim info, motion type
 
 ---
 
@@ -240,7 +244,8 @@ See `docs/CURRENT_BUG.md` for detailed bug tracking and fix history.
 - Looting/Buffing flow (buffs now checked BEFORE grinding, AttackStop() clears dead victims)
 
 **Active Bugs (Low Priority):**
-- Combat reactivity - bot ignores attackers while moving to target (Bug #8)
+- Bug #8: Combat reactivity - bot ignores attackers while moving to target
+- Bug #12: Hunter Auto Shot cooldown spam (console log spam)
 
 ---
 
@@ -257,4 +262,4 @@ To enable: Uncomment the danger zone code in `RandomBotAI.cpp:UpdateOutOfCombatA
 
 ---
 
-*Last Updated: 2026-01-28 (Phase 5.5 - auto-generated grind spots + local randomization)*
+*Last Updated: 2026-01-29 (Bug #13 fix - ranged bot freeze, .bot status command)*

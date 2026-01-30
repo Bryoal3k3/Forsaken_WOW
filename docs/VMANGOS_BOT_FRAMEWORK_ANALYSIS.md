@@ -324,9 +324,9 @@ public:
 ### Engagement Types
 | Class Type | Engage() Implementation |
 |------------|------------------------|
-| Melee | `Attack()` + `MoveChase()` |
-| Caster | `SetTargetGuid()` only - first rotation spell pulls |
-| Hunter | `SetTargetGuid()` + `MoveChase(25.0f)` + Auto Shot |
+| Melee | `Attack(true)` + `MoveChase()` + `HandleMeleeMovement()` |
+| Caster | `Attack(false)` + `MoveChase()` + `HandleRangedMovement()` stops at 30yd |
+| Hunter | `Attack(false)` + `MoveChase()` + Auto Shot + `HandleRangedMovement()` |
 
 ### Handler Access to Spells
 Each handler receives a pointer to `CombatBotBaseAI` in constructor, giving access to:
@@ -432,5 +432,5 @@ public:
 ---
 
 *Generated: 2026-01-08*
-*Updated: 2026-01-25 - Added PathFinder/Navigation section, Strategy system*
+*Updated: 2026-01-29 - Fixed engagement types (MoveChase offsets removed per Bug #13)*
 *Purpose: Pre-implementation research for bot framework extension*

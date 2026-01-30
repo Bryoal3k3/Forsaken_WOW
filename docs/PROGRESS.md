@@ -34,12 +34,13 @@ All Phase 5 bugs have been fixed:
 - ✅ Bug #2: Bots no longer walk onto steep slopes (2026-01-26)
 - ✅ Bug #5: BuildPointPath log spam fixed (2026-01-26)
 - ✅ Bug #11: Bots now properly loot and buff (2026-01-26)
-- ✅ Bug #12: Ranged bots no longer freeze/stuck (2026-01-29)
+- ✅ Bug #13: Ranged bots no longer freeze/stuck (2026-01-29)
 - 🟡 Low priority: Combat reactivity - bot ignores attackers while moving (Bug #8)
+- 🟡 Low priority: Hunter Auto Shot cooldown spam (Bug #12)
 
 ---
 
-## 2026-01-29 - CRITICAL BUG FIX: Ranged Bots Freezing (Bug #12)
+## 2026-01-29 - CRITICAL BUG FIX: Ranged Bots Freezing (Bug #13)
 
 ### Problem
 Ranged bots (Mage, Warlock, Priest, Hunter) would frequently freeze in place after selecting a target. They had a victim set, Motion type was CHASE, but they weren't moving or casting. Attacking their target would "wake them up".
@@ -359,8 +360,10 @@ Created a new combat architecture with per-class handlers:
 | Class Type | Engagement Behavior |
 |------------|---------------------|
 | **Melee** (Warrior, Rogue, Paladin, Shaman, Druid) | `Attack()` + `MoveChase()` - run in and melee |
-| **Caster** (Mage, Priest, Warlock) | `SetTargetGuid()` only - first rotation spell pulls |
-| **Hunter** | `SetTargetGuid()` + `MoveChase(25.0f)` + Auto Shot at range, melee fallback when mobs close in |
+| **Caster** (Mage, Priest, Warlock) | `Attack(false)` + `MoveChase()` + `HandleRangedMovement()` |
+| **Hunter** | `Attack(false)` + `MoveChase()` + Auto Shot + `HandleRangedMovement()` |
+
+*Note: Original implementation used MoveChase offsets (28.0f/25.0f) which were later removed by Bug #13 fix.*
 
 ### New Architecture
 
@@ -942,4 +945,4 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 *Last Updated: 2026-01-29*
-*Current State: Phase 5.5 testing. Ranged bot freeze bug FIXED. Auto-generated 2,684 grind spots. `.bot status` debug command added.*
+*Current State: Phase 5.5 testing. Bug #13 (ranged freeze) FIXED. Auto-generated 2,684 grind spots. `.bot status` debug command added.*

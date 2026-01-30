@@ -478,3 +478,5 @@ void RandomBotGenerator::GenerateRandomBots(uint32 count)
 *Report generated: 2026-01-24*
 *Audit duration: Single session*
 *All issues verified working before marking complete*
+
+**Post-Audit Update (2026-01-29):** Issue #9-11's `MoveChase(28.0f)` offsets were later removed by Bug #13 fix. The offset caused pathfinding issues that made ranged bots freeze. CombatHelpers.h now uses `MoveChase()` without offset for all ranged classes.

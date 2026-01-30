@@ -346,4 +346,4 @@ TravelingStrategy::StartTravel()
 
 ---
 
-*Last Updated: 2026-01-26 (Bug #11 fix - buffing before grinding, AttackStop() for proper combat exit)*
+*Last Updated: 2026-01-29 (Bug #13 fix - ranged bot freeze, .bot status command)*

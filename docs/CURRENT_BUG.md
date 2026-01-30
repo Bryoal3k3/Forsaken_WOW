@@ -1,6 +1,6 @@
 # Current Bug Tracker
 
-## Status: 2 ACTIVE BUGS (Low Priority)
+## Status: 2 ACTIVE BUGS (Low Priority), Bug #13 FIXED (2026-01-29)
 
 ---
 
@@ -55,6 +55,28 @@
 - `RandomBotAI.cpp:UpdateInCombatAI()` - Combat update loop
 - `Player::GetVictim()` - Current attack target
 - `Unit::GetAttackers()` - List of units attacking this unit
+
+---
+
+## Bug #13: Ranged Bots Freezing/Stuck - FIXED
+
+**Status**: ✅ FIXED (2026-01-29)
+
+**Symptom**: Ranged bots (Mage, Warlock, Priest, Hunter) would frequently freeze in place after selecting a target. They had a victim set, Motion type was CHASE, but they weren't moving or casting.
+
+**Root Cause**: `MoveChase(target, 28.0f)` calculated a position 28 yards FROM the target. This often resulted in `PATHFIND_INCOMPLETE` paths. The ChaseMovementGenerator would then stop moving if the bot had Line of Sight to the target (assuming "if you can see it, you don't need to move"). But the bot was still 47+ yards away, out of casting range.
+
+**Fix**: Remove all offset values from MoveChase calls for ranged classes. Chase directly to the target and let `HandleRangedMovement()` stop the bot at casting range (30 yards).
+
+**Files Modified**:
+- `Combat/CombatHelpers.h` - Removed 28.0f offset from EngageCaster(), HandleRangedMovement(), HandleCasterFallback()
+- `Combat/Classes/HunterCombat.cpp` - Removed 25.0f offset from Engage()
+
+**Also Fixed (Same Session)**:
+- Added `HandleCasterFallback()` - wand then melee when all caster spells fail
+- Fixed Hunter Auto Shot check - removed IsMoving() blocker
+- Fixed Priest heal-lock - removed early return after heal attempt
+- Added `.bot status` debug command for diagnosing stuck bots
 
 ---
 
@@ -146,21 +168,15 @@ if (owner.IsPlayer() && ((Player const*)&owner)->IsBot())
 
 It did NOT handle the case where the bot was OUT of cast range and needed to move closer.
 
-**Fix**: Added a third case to `HandleRangedMovement()`:
-```cpp
-// If OUT of cast range, move to casting distance
-if (!inCastRange && !pBot->IsMoving())
-{
-    pBot->GetMotionMaster()->MoveChase(pVictim, 28.0f);
-    return;
-}
-```
+**Fix**: Added a third case to `HandleRangedMovement()` to move closer when out of cast range.
+
+*Note: The original fix used `MoveChase(pVictim, 28.0f)` with an offset, but this was later changed to `MoveChase(pVictim)` (no offset) by Bug #13 fix, which discovered that offsets caused pathfinding issues.*
 
 **Files Modified**:
 - `CombatHelpers.h` - Added out-of-range movement handling
 
 **Also Fixed This Session**:
-- Hunter Auto Shot spam (Spell 75 cooldown error) - Added check for `CURRENT_AUTOREPEAT_SPELL` before casting
+- Hunter Auto Shot spam (Spell 75 cooldown error) - Added check for `CURRENT_AUTOREPEAT_SPELL` before casting (did not fully resolve)
 
 ---
 
@@ -349,4 +365,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-28 (Bug #12 added - Hunter Auto Shot cooldown spam still active)*
+*Last Updated: 2026-01-29 (Bug #13 fixed - ranged bot freeze, .bot status command added)*

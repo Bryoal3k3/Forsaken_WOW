@@ -287,7 +287,7 @@ OnCombatEnded()
 **Purpose:** Regenerate HP/mana without consumables.
 
 **Thresholds:**
-- Start resting: HP < 50% OR mana < 30%
+- Start resting: HP < 35% OR mana < 45%
 - Stop resting: HP ≥ 90% AND mana ≥ 90%
 
 **Implementation (BotCheats):**
@@ -300,8 +300,8 @@ BotCheats::HandleResting(bot, diff, isResting, tickTimer)
     //   - isResting = true
 
     // While resting (every 2 seconds):
-    //   - Add 10% max HP
-    //   - Add 10% max mana
+    //   - Add 5% max HP
+    //   - Add 5% max mana
 
     // If recovered enough:
     //   - Set standing state to STAND
@@ -317,8 +317,8 @@ BotCheats::HandleResting(bot, diff, isResting, tickTimer)
 ### 5. Vendoring Strategy
 
 **Triggers:**
-- Bags > 80% full
-- Any equipped gear < 30% durability
+- Bags 100% full (no free slots)
+- Any equipped gear broken (0% durability)
 
 **Pre-travel check (softer thresholds):**
 - Bags > 60% full
@@ -584,17 +584,17 @@ Zone boundaries for grind spot validation.
 - `NO_MOBS_THRESHOLD`: 5 ticks before travel
 
 ### VendoringStrategy
-- Bag threshold: 80% full
-- Durability threshold: 30%
+- Bag threshold: 100% full (no free slots)
+- Durability threshold: 0% (gear broken)
 - Pre-travel bag threshold: 60%
 - Pre-travel durability threshold: 50%
 
 ### BotCheats (Resting)
-- Start HP threshold: 50%
-- Start mana threshold: 30%
-- Stop HP threshold: 90%
-- Stop mana threshold: 90%
-- Regen per tick: 10% of max
+- Start HP threshold: 35%
+- Start mana threshold: 45%
+- Stop threshold: 90% (both HP and mana)
+- Regen per tick: 5% of max
+- Tick interval: 2 seconds
 
 ---
 

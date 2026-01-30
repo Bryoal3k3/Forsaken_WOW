@@ -1,6 +1,6 @@
 # Current Bug Tracker
 
-## Status: 2 ACTIVE BUGS (Low Priority), Bug #13 FIXED (2026-01-29)
+## Status: 3 ACTIVE BUGS, Bug #13 FIXED (2026-01-29)
 
 ---
 
@@ -77,6 +77,36 @@
 - Fixed Hunter Auto Shot check - removed IsMoving() blocker
 - Fixed Priest heal-lock - removed early return after heal attempt
 - Added `.bot status` debug command for diagnosing stuck bots
+
+---
+
+## Bug #14: Vendoring Not Working / Status Not Showing
+
+**Status**: INVESTIGATING
+
+**Symptom**:
+1. `.bot status` shows "Grinding" and "ACTION: Grinding" when bot is walking to vendor
+2. Bot runs toward vendor but times out before reaching it
+3. Bot turns around with full bags (vendoring never completes)
+
+**Key Details**:
+- `GetStatusInfo()` in RandomBotAI.cpp has no case for vendoring state
+- Falls through to "Grinding" because `m_strategy` (GrindingStrategy) exists
+- The vendoring timeout (STUCK_TIMEOUT = 30 seconds) may be too short
+- Or path to vendor is failing/incomplete
+
+**Two Issues**:
+1. **Status display bug**: Missing vendoring check in `GetStatusInfo()`
+2. **Vendoring timeout/pathing issue**: Bot gives up before reaching vendor
+
+**Files to Check**:
+- `RandomBotAI.cpp:GetStatusInfo()` - Missing vendoring state check
+- `VendoringStrategy.cpp` - STUCK_TIMEOUT constant, stuck detection logic
+- Check if `FindNearestVendor()` is finding vendors too far away
+
+**Fix Plan**:
+1. Add vendoring check to `GetStatusInfo()` before the traveling check
+2. Investigate why bot times out - increase timeout or debug path
 
 ---
 

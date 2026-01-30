@@ -7,6 +7,7 @@
  */
 
 #include "RogueCombat.h"
+#include "BotMovementManager.h"
 #include "CombatBotBaseAI.h"
 #include "../CombatHelpers.h"
 
@@ -17,7 +18,7 @@ RogueCombat::RogueCombat(CombatBotBaseAI* pAI)
 
 bool RogueCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    return CombatHelpers::EngageMelee(pBot, pTarget, "RogueCombat");
+    return CombatHelpers::EngageMelee(pBot, pTarget, "RogueCombat", m_pMoveMgr);
 }
 
 void RogueCombat::UpdateCombat(Player* pBot, Unit* pVictim)
@@ -26,7 +27,7 @@ void RogueCombat::UpdateCombat(Player* pBot, Unit* pVictim)
         return;
 
     // Ensure we keep chasing if not in melee range (handles movement interruptions)
-    CombatHelpers::HandleMeleeMovement(pBot, pVictim);
+    CombatHelpers::HandleMeleeMovement(pBot, pVictim, m_pMoveMgr);
 
     // Slice and Dice if we have combo points
     if (m_pAI->m_spells.rogue.pSliceAndDice &&

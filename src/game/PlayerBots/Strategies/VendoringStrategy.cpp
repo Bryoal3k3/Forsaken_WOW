@@ -7,6 +7,7 @@
  */
 
 #include "VendoringStrategy.h"
+#include "BotMovementManager.h"
 #include "Player.h"
 #include "Creature.h"
 #include "ObjectMgr.h"
@@ -466,7 +467,10 @@ bool VendoringStrategy::Update(Player* pBot, uint32 diff)
             }
 
             // Start walking to vendor (with pathfinding for collision avoidance)
-            pBot->GetMotionMaster()->MovePoint(0, m_targetVendor.x, m_targetVendor.y, m_targetVendor.z, MOVE_PATHFINDING | MOVE_RUN_MODE);
+            if (m_pMovementMgr)
+                m_pMovementMgr->MoveTo(m_targetVendor.x, m_targetVendor.y, m_targetVendor.z, MovementPriority::PRIORITY_NORMAL);
+            else
+                pBot->GetMotionMaster()->MovePoint(0, m_targetVendor.x, m_targetVendor.y, m_targetVendor.z, MOVE_PATHFINDING | MOVE_RUN_MODE);
             m_stuckTimer = 0;
             m_lastDistanceCheckTime = 0;
             m_lastDistanceToVendor = FLT_MAX;
@@ -503,7 +507,10 @@ bool VendoringStrategy::Update(Player* pBot, uint32 diff)
                 {
                     // Not making progress, might be stuck
                     // Try moving again
-                    pBot->GetMotionMaster()->MovePoint(0, m_targetVendor.x, m_targetVendor.y, m_targetVendor.z, MOVE_PATHFINDING | MOVE_RUN_MODE);
+                    if (m_pMovementMgr)
+                        m_pMovementMgr->MoveTo(m_targetVendor.x, m_targetVendor.y, m_targetVendor.z, MovementPriority::PRIORITY_NORMAL);
+                    else
+                        pBot->GetMotionMaster()->MovePoint(0, m_targetVendor.x, m_targetVendor.y, m_targetVendor.z, MOVE_PATHFINDING | MOVE_RUN_MODE);
                 }
                 m_lastDistanceToVendor = dist;
                 m_lastDistanceCheckTime = 0;

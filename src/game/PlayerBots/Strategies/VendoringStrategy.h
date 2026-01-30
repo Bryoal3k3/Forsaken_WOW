@@ -16,6 +16,7 @@
 
 class Player;
 class Creature;
+class BotMovementManager;
 
 // Cached vendor location data
 struct VendorLocation
@@ -66,7 +67,12 @@ public:
     // Pre-build vendor cache (call during server startup)
     static void BuildVendorCache();
 
+    // Set movement manager (called by RandomBotAI after construction)
+    void SetMovementManager(BotMovementManager* pMoveMgr) { m_pMovementMgr = pMoveMgr; }
+
 private:
+    // Movement manager (set by RandomBotAI, centralized movement coordination)
+    BotMovementManager* m_pMovementMgr = nullptr;
     enum class VendorState
     {
         IDLE,               // Not vendoring

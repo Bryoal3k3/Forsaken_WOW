@@ -8,6 +8,7 @@
  */
 
 #include "RandomBotAI.h"
+#include "BotMovementManager.h"
 #include "Combat/BotCombatMgr.h"
 #include "Strategies/GrindingStrategy.h"
 #include "Strategies/GhostWalkingStrategy.h"
@@ -230,9 +231,30 @@ void RandomBotAI::UpdateAI(uint32 const diff)
         // Initialize combat manager with spell data
         m_combatMgr->Initialize(me, this);
 
+        // Initialize movement manager (centralized movement coordination)
+        m_movementMgr = std::make_unique<BotMovementManager>(me);
+
         // Wire up combat manager to grinding strategy (avoids dynamic_cast in hot path)
         if (GrindingStrategy* pGrinding = static_cast<GrindingStrategy*>(m_strategy.get()))
+        {
             pGrinding->SetCombatMgr(m_combatMgr.get());
+            pGrinding->SetMovementManager(m_movementMgr.get());
+        }
+
+        // Wire up movement manager to all strategies
+        if (m_travelingStrategy)
+            m_travelingStrategy->SetMovementManager(m_movementMgr.get());
+        if (m_vendoringStrategy)
+            m_vendoringStrategy->SetMovementManager(m_movementMgr.get());
+        if (m_ghostStrategy)
+            m_ghostStrategy->SetMovementManager(m_movementMgr.get());
+
+        // Wire up movement manager to looting behavior
+        m_looting.SetMovementManager(m_movementMgr.get());
+
+        // Wire up movement manager to combat manager (for class handlers)
+        if (m_combatMgr)
+            m_combatMgr->SetMovementManager(m_movementMgr.get());
 
         // Summon pet for hunters/warlocks
         SummonPetIfNeeded();
@@ -255,6 +277,11 @@ void RandomBotAI::UpdateAI(uint32 const diff)
             me->GetName(), me->GetClass(), me->GetLevel(), m_strategy->GetName());
         return;
     }
+
+    // Update movement manager (stuck detection, state tracking)
+    // Note: Uses RB_UPDATE_INTERVAL as diff since we throttle updates
+    if (m_movementMgr)
+        m_movementMgr->Update(RB_UPDATE_INTERVAL);
 
     // Dead? Use ghost walking strategy
     if (!me->IsAlive())

@@ -200,6 +200,7 @@ set (game_SRCS
     PlayerBots/RandomBotGenerator.cpp
     PlayerBots/BotCheats.cpp
     PlayerBots/DangerZoneCache.cpp
+    PlayerBots/BotMovementManager.cpp
     PlayerBots/Strategies/GrindingStrategy.cpp
     PlayerBots/Strategies/GhostWalkingStrategy.cpp
     PlayerBots/Strategies/VendoringStrategy.cpp
@@ -444,6 +445,7 @@ set (game_SRCS
     PlayerBots/RandomBotGenerator.h
     PlayerBots/BotCheats.h
     PlayerBots/DangerZoneCache.h
+    PlayerBots/BotMovementManager.h
     PlayerBots/Strategies/IBotStrategy.h
     PlayerBots/Strategies/GrindingStrategy.h
     PlayerBots/Strategies/GhostWalkingStrategy.h

@@ -7,6 +7,7 @@
  */
 
 #include "LootingBehavior.h"
+#include "BotMovementManager.h"
 #include "Player.h"
 #include "Creature.h"
 #include "MotionMaster.h"
@@ -17,21 +18,42 @@
 #include "WorldSession.h"
 #include "Map.h"
 
-// Custom checker to find dead creatures in range
-class DeadCreaturesInRange
+// Single-pass checker to find the nearest lootable corpse.
+// Used with CreatureLastSearcher - accepts creature only if it's closer than current best.
+// This avoids heap allocation from std::list that the old CreatureListSearcher pattern required.
+class NearestLootableCorpse
 {
 public:
-    DeadCreaturesInRange(WorldObject const* pObject, float fMaxRange)
-        : m_pObject(pObject), m_fRange(fMaxRange) {}
+    NearestLootableCorpse(Player* pBot, float maxRange)
+        : m_pBot(pBot), m_bestDist(maxRange + 1.0f) {}
 
-    bool operator() (Creature* pCreature)
+    bool operator()(Creature* pCreature)
     {
-        return !pCreature->IsAlive() && m_pObject->IsWithinDist(pCreature, m_fRange, false);
+        // Must be dead
+        if (pCreature->IsAlive())
+            return false;
+
+        // Must be tapped by us
+        if (!pCreature->IsTappedBy(m_pBot))
+            return false;
+
+        // Must have loot flag (indicates lootable)
+        if (!pCreature->HasFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_LOOTABLE))
+            return false;
+
+        // Check if closer than current best
+        float dist = m_pBot->GetDistance(pCreature);
+        if (dist < m_bestDist)
+        {
+            m_bestDist = dist;
+            return true;  // Accept - this is the new closest
+        }
+        return false;
     }
 
 private:
-    WorldObject const* m_pObject;
-    float m_fRange;
+    Player* m_pBot;
+    float m_bestDist;
 };
 
 // ============================================================================
@@ -98,8 +120,10 @@ bool LootingBehavior::Update(Player* pBot, uint32 diff)
     else
     {
         // Move towards the corpse (with pathfinding for collision avoidance)
-        pBot->GetMotionMaster()->MovePoint(0, pCorpse->GetPositionX(),
-            pCorpse->GetPositionY(), pCorpse->GetPositionZ(), MOVE_PATHFINDING | MOVE_RUN_MODE);
+        if (m_pMovementMgr)
+            m_pMovementMgr->MoveTo(pCorpse->GetPositionX(), pCorpse->GetPositionY(), pCorpse->GetPositionZ(), MovementPriority::PRIORITY_NORMAL);
+        else
+            pBot->GetMotionMaster()->MovePoint(0, pCorpse->GetPositionX(), pCorpse->GetPositionY(), pCorpse->GetPositionZ(), MOVE_PATHFINDING | MOVE_RUN_MODE);
         return true; // Still busy
     }
 }
@@ -128,33 +152,11 @@ void LootingBehavior::Reset()
 
 Creature* LootingBehavior::FindLootableCorpse(Player* pBot)
 {
-    std::list<Creature*> creatures;
-
-    DeadCreaturesInRange check(pBot, LOOT_RANGE);
-    MaNGOS::CreatureListSearcher<DeadCreaturesInRange> searcher(creatures, check);
-    Cell::VisitGridObjects(pBot, searcher, LOOT_RANGE);
-
     Creature* pClosest = nullptr;
-    float closestDist = LOOT_RANGE + 1.0f;
 
-    for (Creature* pCreature : creatures)
-    {
-        // Must be tapped by us
-        if (!pCreature->IsTappedBy(pBot))
-            continue;
-
-        // Must have loot flag (indicates lootable)
-        if (!pCreature->HasFlag(UNIT_DYNAMIC_FLAGS, UNIT_DYNFLAG_LOOTABLE))
-            continue;
-
-        // Find closest
-        float dist = pBot->GetDistance(pCreature);
-        if (dist < closestDist)
-        {
-            closestDist = dist;
-            pClosest = pCreature;
-        }
-    }
+    NearestLootableCorpse check(pBot, LOOT_RANGE);
+    MaNGOS::CreatureLastSearcher<NearestLootableCorpse> searcher(pClosest, check);
+    Cell::VisitGridObjects(pBot, searcher, LOOT_RANGE);
 
     return pClosest;
 }

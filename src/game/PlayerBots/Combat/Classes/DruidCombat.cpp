@@ -7,6 +7,7 @@
  */
 
 #include "DruidCombat.h"
+#include "BotMovementManager.h"
 #include "CombatBotBaseAI.h"
 #include "../CombatHelpers.h"
 
@@ -17,7 +18,7 @@ DruidCombat::DruidCombat(CombatBotBaseAI* pAI)
 
 bool DruidCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    return CombatHelpers::EngageMelee(pBot, pTarget, "DruidCombat");
+    return CombatHelpers::EngageMelee(pBot, pTarget, "DruidCombat", m_pMoveMgr);
 }
 
 void DruidCombat::UpdateCombat(Player* pBot, Unit* pVictim)
@@ -27,7 +28,7 @@ void DruidCombat::UpdateCombat(Player* pBot, Unit* pVictim)
 
     // Ensure we keep chasing if not in melee range (handles movement interruptions)
     // Druid currently fights as melee with caster spells
-    CombatHelpers::HandleMeleeMovement(pBot, pVictim);
+    CombatHelpers::HandleMeleeMovement(pBot, pVictim, m_pMoveMgr);
 
     // Moonfire (DoT)
     if (m_pAI->m_spells.druid.pMoonfire &&

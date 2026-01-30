@@ -7,6 +7,7 @@
  */
 
 #include "GhostWalkingStrategy.h"
+#include "BotMovementManager.h"
 #include "TravelingStrategy.h"
 #include "RandomBotAI.h"
 #include "Player.h"
@@ -140,9 +141,16 @@ bool GhostWalkingStrategy::Update(Player* pBot, uint32 /*diff*/)
     }
 
     // Not close enough - move toward corpse (with pathfinding for collision avoidance)
-    if (!m_isWalkingToCorpse || pBot->GetMotionMaster()->GetCurrentMovementGeneratorType() != POINT_MOTION_TYPE)
+    uint8 currentMoveType = m_pMovementMgr
+        ? m_pMovementMgr->GetCurrentMovementType()
+        : pBot->GetMotionMaster()->GetCurrentMovementGeneratorType();
+
+    if (!m_isWalkingToCorpse || currentMoveType != POINT_MOTION_TYPE)
     {
-        pBot->GetMotionMaster()->MovePoint(0, corpse->GetPositionX(), corpse->GetPositionY(), corpse->GetPositionZ(), MOVE_PATHFINDING | MOVE_RUN_MODE);
+        if (m_pMovementMgr)
+            m_pMovementMgr->MoveTo(corpse->GetPositionX(), corpse->GetPositionY(), corpse->GetPositionZ(), MovementPriority::PRIORITY_NORMAL);
+        else
+            pBot->GetMotionMaster()->MovePoint(0, corpse->GetPositionX(), corpse->GetPositionY(), corpse->GetPositionZ(), MOVE_PATHFINDING | MOVE_RUN_MODE);
         m_isWalkingToCorpse = true;
     }
 

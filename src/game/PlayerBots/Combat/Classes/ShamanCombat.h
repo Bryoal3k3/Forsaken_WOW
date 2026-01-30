@@ -12,12 +12,14 @@
 #include "Combat/IClassCombat.h"
 
 class CombatBotBaseAI;
+class BotMovementManager;
 
 class ShamanCombat : public IClassCombat
 {
 public:
     explicit ShamanCombat(CombatBotBaseAI* pAI);
 
+    void SetMovementManager(BotMovementManager* pMoveMgr) override { m_pMoveMgr = pMoveMgr; }
     bool Engage(Player* pBot, Unit* pTarget) override;
     void UpdateCombat(Player* pBot, Unit* pVictim) override;
     void UpdateOutOfCombat(Player* pBot) override;
@@ -25,6 +27,7 @@ public:
 
 private:
     CombatBotBaseAI* m_pAI;
+    BotMovementManager* m_pMoveMgr = nullptr;
 };
 
 #endif // MANGOS_SHAMANCOMBAT_H

@@ -7,6 +7,7 @@
  */
 
 #include "PriestCombat.h"
+#include "BotMovementManager.h"
 #include "CombatBotBaseAI.h"
 #include "../CombatHelpers.h"
 
@@ -17,7 +18,7 @@ PriestCombat::PriestCombat(CombatBotBaseAI* pAI)
 
 bool PriestCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    return CombatHelpers::EngageCaster(pBot, pTarget, "PriestCombat");
+    return CombatHelpers::EngageCaster(pBot, pTarget, "PriestCombat", m_pMoveMgr);
 }
 
 void PriestCombat::UpdateCombat(Player* pBot, Unit* pVictim)
@@ -25,7 +26,7 @@ void PriestCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     if (!pVictim)
         return;
 
-    CombatHelpers::HandleRangedMovement(pBot, pVictim);
+    CombatHelpers::HandleRangedMovement(pBot, pVictim, 30.0f, m_pMoveMgr);
 
     // Shield self at low health
     if (pBot->GetHealthPercent() < 50.0f &&
@@ -69,7 +70,7 @@ void PriestCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     }
 
     // Fallback if all spells failed
-    CombatHelpers::HandleCasterFallback(pBot, pVictim, "PriestCombat");
+    CombatHelpers::HandleCasterFallback(pBot, pVictim, "PriestCombat", m_pMoveMgr);
 }
 
 void PriestCombat::UpdateOutOfCombat(Player* pBot)

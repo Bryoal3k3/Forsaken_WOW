@@ -80,6 +80,7 @@ Server Start
 ```
 src/game/PlayerBots/
 ├── RandomBotAI.h/cpp           ← Main AI brain
+├── BotMovementManager.h/cpp    ← Centralized movement coordinator
 ├── RandomBotGenerator.h/cpp    ← First-launch generation
 ├── PlayerBotMgr.h/cpp          ← Bot lifecycle management
 ├── BotCheats.h/cpp             ← Resting (no consumables needed)
@@ -87,13 +88,13 @@ src/game/PlayerBots/
 ├── Combat/
 │   ├── IClassCombat.h          ← Interface for class handlers
 │   ├── BotCombatMgr.h/cpp      ← Combat coordinator
-│   ├── CombatHelpers.h         ← Shared helpers (engage, movement)
+│   ├── CombatHelpers.h         ← Shared helpers (uses BotMovementManager)
 │   └── Classes/                ← 9 class-specific handlers
 │       ├── WarriorCombat.h/cpp
 │       ├── MageCombat.h/cpp
 │       └── ... (all 9 classes)
 │
-└── Strategies/
+└── Strategies/                 ← All use BotMovementManager for movement
     ├── IBotStrategy.h          ← Strategy interface
     ├── GrindingStrategy.h/cpp  ← Find and kill mobs
     ├── LootingBehavior.h/cpp   ← Loot corpses
@@ -191,6 +192,25 @@ RandomBotAI::UpdateAI(diff)
 ---
 
 ## Core Systems
+
+### 0. Movement System (BotMovementManager)
+
+All bot movement is centralized through `BotMovementManager`. Strategies and combat handlers never call MotionMaster directly.
+
+**Key Features:**
+| Feature | Purpose |
+|---------|---------|
+| Priority system | IDLE < WANDER < NORMAL < COMBAT < FORCED |
+| Duplicate detection | Won't spam MoveChase to same target |
+| CC validation | Won't move while stunned/rooted/confused |
+| Multi-Z search | Tries 5 heights for caves/multi-story buildings |
+| Path smoothing | Skips waypoints when LoS exists |
+| 5-sec stuck detection | Micro-recovery (step back/sideways) before emergency teleport |
+
+**Wiring:**
+Each strategy receives movement manager via `SetMovementManager()` during RandomBotAI initialization.
+
+---
 
 ### 1. Combat System
 
@@ -598,4 +618,4 @@ Zone boundaries for grind spot validation.
 
 ---
 
-*Last Updated: 2026-01-29*
+*Last Updated: 2026-01-30 (Added BotMovementManager)*

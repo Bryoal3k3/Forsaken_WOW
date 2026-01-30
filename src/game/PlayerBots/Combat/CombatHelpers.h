@@ -13,6 +13,7 @@
 #include "Player.h"
 #include "Unit.h"
 #include "MotionMaster.h"
+#include "BotMovementManager.h"
 #include "Log.h"
 
 namespace CombatHelpers
@@ -23,7 +24,7 @@ namespace CombatHelpers
     // a position 28 yards FROM target, which can result in INCOMPLETE paths that cause
     // the chase generator to stop (thinking bot has LoS and doesn't need to move).
     // HandleRangedMovement() will stop the bot at casting range.
-    inline bool EngageCaster(Player* pBot, Unit* pTarget, const char* className)
+    inline bool EngageCaster(Player* pBot, Unit* pTarget, const char* className, BotMovementManager* pMoveMgr = nullptr)
     {
         // Face target before attacking (fixes stuck bug when target is behind)
         pBot->SetFacingToObject(pTarget);
@@ -34,7 +35,10 @@ namespace CombatHelpers
         if (pBot->Attack(pTarget, false))
         {
             // Chase directly to target - HandleRangedMovement() will stop us at cast range
-            pBot->GetMotionMaster()->MoveChase(pTarget);
+            if (pMoveMgr)
+                pMoveMgr->Chase(pTarget, 0.0f, MovementPriority::PRIORITY_COMBAT);
+            else
+                pBot->GetMotionMaster()->MoveChase(pTarget);
 
             sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[%s] %s engaging %s (Attack success, moving to range)",
                 className, pBot->GetName(), pTarget->GetName());
@@ -48,7 +52,7 @@ namespace CombatHelpers
 
     // Melee engagement: Attack(true) + MoveChase into melee
     // Used by: Warrior, Rogue, Paladin, Shaman, Druid
-    inline bool EngageMelee(Player* pBot, Unit* pTarget, const char* className)
+    inline bool EngageMelee(Player* pBot, Unit* pTarget, const char* className, BotMovementManager* pMoveMgr = nullptr)
     {
         // Face target before attacking (fixes stuck bug when target is behind)
         pBot->SetFacingToObject(pTarget);
@@ -56,7 +60,10 @@ namespace CombatHelpers
         // Melee classes use Attack(true) to enable auto-attack swings
         if (pBot->Attack(pTarget, true))
         {
-            pBot->GetMotionMaster()->MoveChase(pTarget);
+            if (pMoveMgr)
+                pMoveMgr->Chase(pTarget, 0.0f, MovementPriority::PRIORITY_COMBAT);
+            else
+                pBot->GetMotionMaster()->MoveChase(pTarget);
             sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[%s] %s engaging %s (Attack success)",
                 className, pBot->GetName(), pTarget->GetName());
             return true;
@@ -69,7 +76,7 @@ namespace CombatHelpers
 
     // Ranged movement handling: stop moving when in range AND have LoS
     // Used by: Mage, Priest, Warlock, Hunter
-    inline void HandleRangedMovement(Player* pBot, Unit* pVictim, float castRange = 30.0f)
+    inline void HandleRangedMovement(Player* pBot, Unit* pVictim, float castRange = 30.0f, BotMovementManager* pMoveMgr = nullptr)
     {
         // Only kite if target is snared/rooted, otherwise stand and fight
         bool targetIsSnared = pVictim->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED) ||
@@ -80,7 +87,10 @@ namespace CombatHelpers
         bool hasLoS = pBot->IsWithinLOSInMap(pVictim);
 
         // Check if we're actively chasing (not just "moving" in some other way)
-        bool isChasing = pBot->GetMotionMaster()->GetCurrentMovementGeneratorType() == CHASE_MOTION_TYPE;
+        uint8 moveType = pMoveMgr
+            ? pMoveMgr->GetCurrentMovementType()
+            : pBot->GetMotionMaster()->GetCurrentMovementGeneratorType();
+        bool isChasing = moveType == CHASE_MOTION_TYPE;
 
         // If OUT of cast range, ensure we're chasing
         // NOTE: Use MoveChase without offset - offset causes pathfinding issues
@@ -89,7 +99,10 @@ namespace CombatHelpers
         {
             if (!isChasing || !pBot->IsMoving())
             {
-                pBot->GetMotionMaster()->MoveChase(pVictim);
+                if (pMoveMgr)
+                    pMoveMgr->Chase(pVictim, 0.0f, MovementPriority::PRIORITY_COMBAT);
+                else
+                    pBot->GetMotionMaster()->MoveChase(pVictim);
             }
             return;
         }
@@ -99,7 +112,10 @@ namespace CombatHelpers
         {
             if (!isChasing || !pBot->IsMoving())
             {
-                pBot->GetMotionMaster()->MoveChase(pVictim);
+                if (pMoveMgr)
+                    pMoveMgr->Chase(pVictim, 0.0f, MovementPriority::PRIORITY_COMBAT);
+                else
+                    pBot->GetMotionMaster()->MoveChase(pVictim);
             }
             return;
         }
@@ -107,20 +123,28 @@ namespace CombatHelpers
         // In range AND have LoS - stop if target isn't snared
         if (!targetIsSnared && pBot->IsMoving())
         {
-            pBot->StopMoving();
-            pBot->GetMotionMaster()->Clear();
+            if (pMoveMgr)
+                pMoveMgr->StopMovement(false);
+            else
+            {
+                pBot->StopMoving();
+                pBot->GetMotionMaster()->Clear();
+            }
         }
     }
 
     // Melee movement handling: ensure bot keeps chasing if not in melee range
     // Used by: Warrior, Rogue, Paladin, Shaman, Druid
-    inline void HandleMeleeMovement(Player* pBot, Unit* pVictim)
+    inline void HandleMeleeMovement(Player* pBot, Unit* pVictim, BotMovementManager* pMoveMgr = nullptr)
     {
         // If not in melee range and not moving, re-issue chase command
         // This handles cases where movement gets interrupted (pathfinding edge cases, etc.)
         if (!pBot->CanReachWithMeleeAutoAttack(pVictim) && !pBot->IsMoving())
         {
-            pBot->GetMotionMaster()->MoveChase(pVictim);
+            if (pMoveMgr)
+                pMoveMgr->Chase(pVictim, 0.0f, MovementPriority::PRIORITY_COMBAT);
+            else
+                pBot->GetMotionMaster()->MoveChase(pVictim);
         }
     }
 
@@ -129,7 +153,7 @@ namespace CombatHelpers
 
     // Fallback when all caster spells fail - try wand, then melee
     // Used by: Mage, Priest, Warlock
-    inline void HandleCasterFallback(Player* pBot, Unit* pVictim, const char* className)
+    inline void HandleCasterFallback(Player* pBot, Unit* pVictim, const char* className, BotMovementManager* pMoveMgr = nullptr)
     {
         // Try wand first (if equipped and not already shooting)
         if (pBot->HasSpell(SPELL_SHOOT_WAND) &&
@@ -151,7 +175,10 @@ namespace CombatHelpers
         else if (!pBot->IsMoving())
         {
             // Out of range and not moving - move closer (no offset!)
-            pBot->GetMotionMaster()->MoveChase(pVictim);
+            if (pMoveMgr)
+                pMoveMgr->Chase(pVictim, 0.0f, MovementPriority::PRIORITY_COMBAT);
+            else
+                pBot->GetMotionMaster()->MoveChase(pVictim);
         }
     }
 }

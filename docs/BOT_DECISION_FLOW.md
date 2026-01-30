@@ -4,6 +4,55 @@ This document describes how RandomBotAI coordinates strategies and makes decisio
 
 ---
 
+## BotMovementManager (Centralized Movement)
+
+All movement commands go through `BotMovementManager` instead of calling MotionMaster directly.
+
+### Architecture
+```
+RandomBotAI
+├── BotMovementManager (single point of control)
+│   ├── Priority system (prevents interruptions)
+│   ├── Duplicate detection (no MoveChase spam)
+│   ├── CC validation (won't move while stunned)
+│   ├── Multi-Z search (caves/buildings)
+│   ├── Path smoothing (skip unnecessary waypoints)
+│   └── 5-sec stuck detection + micro-recovery
+│   ↓
+└── MotionMaster (engine calls)
+```
+
+### Movement Priority
+| Priority | Value | Used For |
+|----------|-------|----------|
+| `PRIORITY_IDLE` | 0 | Standing still |
+| `PRIORITY_WANDER` | 1 | Random exploration (future) |
+| `PRIORITY_NORMAL` | 2 | Travel, vendor, loot, ghost walk |
+| `PRIORITY_COMBAT` | 3 | Chase, engage, positioning |
+| `PRIORITY_FORCED` | 4 | Flee, emergency (cannot be overridden) |
+
+### Key Methods
+| Method | Purpose |
+|--------|---------|
+| `MoveTo(x, y, z, priority)` | Point movement with Z validation |
+| `Chase(target, distance, priority)` | Combat movement with duplicate detection |
+| `MoveNear(x, y, z, maxDist, priority)` | 8-angle search to prevent stacking |
+| `MoveAway(threat, distance, priority)` | Flee mechanism |
+| `SmoothPath(path)` | Skip waypoints when LoS exists |
+| `Update(diff)` | Stuck detection (every 1 sec) |
+
+### Wiring Pattern
+Each strategy receives movement manager via `SetMovementManager()` during initialization:
+```cpp
+// In RandomBotAI one-time init:
+m_movementMgr = std::make_unique<BotMovementManager>(me);
+m_combatMgr->SetMovementManager(m_movementMgr.get());
+m_strategy->SetMovementManager(m_movementMgr.get());
+// ... etc for all strategies
+```
+
+---
+
 ## Update Loop (Every 1000ms)
 
 ```
@@ -148,8 +197,9 @@ if (grindResult == NO_TARGETS && noMobsCount >= 5)
 
 **Waypoint System:**
 - Long journeys are split into ~200 yard segments
-- Each segment uses `MovePoint()` with `MOVE_PATHFINDING` flag
+- Each segment uses `BotMovementManager::MoveTo()` with pointId for callback chaining
 - `MovementInform()` callback triggers next segment immediately
+- Path smoothing via `BotMovementManager::SmoothPath()` skips unnecessary waypoints
 - Path validated before travel using `PathFinder::calculate()`
 
 ### Death Handling (GhostWalkingStrategy.h)
@@ -306,7 +356,7 @@ PathFinder has debug logging filtered to only fire for player bots. Logs are pre
 | Bot stands idle | No mobs in range, backoff active (waits up to 8s), or travel not triggering |
 | Bot keeps sitting | Resting threshold not met (check HP/mana %) |
 | Bot won't vendor | Bags not 100% full, gear not broken |
-| Bot stuck traveling | Navmesh issue, stuck timeout will reset |
+| Bot stuck traveling | BotMovementManager detects in 5 sec, tries micro-recovery then emergency teleport |
 | Bot slow to find mobs | Backoff active from previous empty search (resets when mob found) |
 | "Cannot reach" spam | Long path exceeding 256 waypoints (fixed), or navmesh hole |
 | `startPoly=0` errors | Bot at invalid position (falling through floor or navmesh edge) |
@@ -346,4 +396,4 @@ TravelingStrategy::StartTravel()
 
 ---
 
-*Last Updated: 2026-01-29 (Bug #13 fix - ranged bot freeze, .bot status command)*
+*Last Updated: 2026-01-30 (Added BotMovementManager section)*

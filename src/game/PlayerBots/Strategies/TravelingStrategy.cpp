@@ -8,6 +8,7 @@
  */
 
 #include "TravelingStrategy.h"
+#include "BotMovementManager.h"
 #include "VendoringStrategy.h"
 #include "DangerZoneCache.h"
 #include "PlayerBotMgr.h"
@@ -618,6 +619,20 @@ void TravelingStrategy::GenerateWaypoints(Player* pBot)
     // Filter waypoints through danger cache and insert detours
     // FilterWaypointsForDanger(pBot);
 
+    // Apply path smoothing - skip unnecessary waypoints when LoS exists
+    // This reduces hill-hugging by allowing more direct routes
+    if (m_pMovementMgr && m_waypoints.size() > 2)
+    {
+        size_t beforeCount = m_waypoints.size();
+        m_waypoints = m_pMovementMgr->SmoothPath(m_waypoints);
+        if (m_waypoints.size() < beforeCount)
+        {
+            sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+                "[TravelingStrategy] %s: Path smoothed from %zu to %zu waypoints",
+                pBot->GetName(), beforeCount, m_waypoints.size());
+        }
+    }
+
     m_waypointsGenerated = true;
 
     if (skippedWaypoints > 0)
@@ -641,10 +656,28 @@ void TravelingStrategy::MoveToCurrentWaypoint(Player* pBot)
 
     Vector3 const& wp = m_waypoints[m_currentWaypoint];
 
-    pBot->GetMotionMaster()->MovePoint(
-        m_currentWaypoint,  // Use waypoint index as movement ID
-        wp.x, wp.y, wp.z,
-        MOVE_PATHFINDING | MOVE_RUN_MODE | MOVE_EXCLUDE_STEEP_SLOPES);
+    // Use movement manager if available, with waypoint index as movement ID
+    if (m_pMovementMgr)
+    {
+        MoveResult result = m_pMovementMgr->MoveTo(wp.x, wp.y, wp.z,
+            MovementPriority::PRIORITY_NORMAL, m_currentWaypoint);
+
+        if (result != MoveResult::SUCCESS)
+        {
+            sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+                "[TravelingStrategy] %s: MoveTo failed with result %u for waypoint %u",
+                pBot->GetName(), static_cast<uint8>(result), m_currentWaypoint);
+            return;
+        }
+    }
+    else
+    {
+        // Fallback to direct MotionMaster call
+        pBot->GetMotionMaster()->MovePoint(
+            m_currentWaypoint,  // Use waypoint index as movement ID
+            wp.x, wp.y, wp.z,
+            MOVE_PATHFINDING | MOVE_RUN_MODE | MOVE_EXCLUDE_STEEP_SLOPES);
+    }
 
     sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
         "[TravelingStrategy] %s: Moving to waypoint %u/%zu (%.1f, %.1f, %.1f)",

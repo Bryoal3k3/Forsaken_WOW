@@ -14,11 +14,15 @@
 
 class Player;
 class Unit;
+class BotMovementManager;
 
 class IClassCombat
 {
 public:
     virtual ~IClassCombat() = default;
+
+    // Set movement manager (called by BotCombatMgr after construction)
+    virtual void SetMovementManager(BotMovementManager* pMoveMgr) = 0;
 
     // How to initiate combat (pull)
     // Returns true if engagement started successfully

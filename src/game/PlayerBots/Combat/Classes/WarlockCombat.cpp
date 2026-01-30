@@ -7,6 +7,7 @@
  */
 
 #include "WarlockCombat.h"
+#include "BotMovementManager.h"
 #include "CombatBotBaseAI.h"
 #include "../CombatHelpers.h"
 
@@ -17,7 +18,7 @@ WarlockCombat::WarlockCombat(CombatBotBaseAI* pAI)
 
 bool WarlockCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    return CombatHelpers::EngageCaster(pBot, pTarget, "WarlockCombat");
+    return CombatHelpers::EngageCaster(pBot, pTarget, "WarlockCombat", m_pMoveMgr);
 }
 
 void WarlockCombat::UpdateCombat(Player* pBot, Unit* pVictim)
@@ -25,7 +26,7 @@ void WarlockCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     if (!pVictim)
         return;
 
-    CombatHelpers::HandleRangedMovement(pBot, pVictim);
+    CombatHelpers::HandleRangedMovement(pBot, pVictim, 30.0f, m_pMoveMgr);
 
     // Corruption
     if (m_pAI->m_spells.warlock.pCorruption &&
@@ -63,7 +64,7 @@ void WarlockCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     }
 
     // Fallback if all spells failed
-    CombatHelpers::HandleCasterFallback(pBot, pVictim, "WarlockCombat");
+    CombatHelpers::HandleCasterFallback(pBot, pVictim, "WarlockCombat", m_pMoveMgr);
 }
 
 void WarlockCombat::UpdateOutOfCombat(Player* pBot)

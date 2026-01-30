@@ -7,6 +7,7 @@
  */
 
 #include "PaladinCombat.h"
+#include "BotMovementManager.h"
 #include "CombatBotBaseAI.h"
 #include "../CombatHelpers.h"
 
@@ -17,7 +18,7 @@ PaladinCombat::PaladinCombat(CombatBotBaseAI* pAI)
 
 bool PaladinCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    return CombatHelpers::EngageMelee(pBot, pTarget, "PaladinCombat");
+    return CombatHelpers::EngageMelee(pBot, pTarget, "PaladinCombat", m_pMoveMgr);
 }
 
 void PaladinCombat::UpdateCombat(Player* pBot, Unit* pVictim)
@@ -26,7 +27,7 @@ void PaladinCombat::UpdateCombat(Player* pBot, Unit* pVictim)
         return;
 
     // Ensure we keep chasing if not in melee range (handles movement interruptions)
-    CombatHelpers::HandleMeleeMovement(pBot, pVictim);
+    CombatHelpers::HandleMeleeMovement(pBot, pVictim, m_pMoveMgr);
 
     // Judgement
     if (m_pAI->m_spells.paladin.pJudgement &&

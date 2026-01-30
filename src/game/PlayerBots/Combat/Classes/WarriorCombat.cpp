@@ -7,6 +7,7 @@
  */
 
 #include "WarriorCombat.h"
+#include "BotMovementManager.h"
 #include "CombatBotBaseAI.h"
 #include "../CombatHelpers.h"
 
@@ -17,7 +18,7 @@ WarriorCombat::WarriorCombat(CombatBotBaseAI* pAI)
 
 bool WarriorCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    return CombatHelpers::EngageMelee(pBot, pTarget, "WarriorCombat");
+    return CombatHelpers::EngageMelee(pBot, pTarget, "WarriorCombat", m_pMoveMgr);
 }
 
 void WarriorCombat::UpdateCombat(Player* pBot, Unit* pVictim)
@@ -26,7 +27,7 @@ void WarriorCombat::UpdateCombat(Player* pBot, Unit* pVictim)
         return;
 
     // Ensure we keep chasing if not in melee range (handles movement interruptions)
-    CombatHelpers::HandleMeleeMovement(pBot, pVictim);
+    CombatHelpers::HandleMeleeMovement(pBot, pVictim, m_pMoveMgr);
 
     // Execute at low health
     if (m_pAI->m_spells.warrior.pExecute &&

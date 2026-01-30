@@ -7,6 +7,7 @@
  */
 
 #include "GrindingStrategy.h"
+#include "BotMovementManager.h"
 #include "Combat/BotCombatMgr.h"
 #include "Player.h"
 #include "Creature.h"
@@ -97,7 +98,10 @@ GrindingResult GrindingStrategy::UpdateGrinding(Player* pBot, uint32 /*diff*/)
         // Fallback if combat manager not available
         if (pBot->Attack(pTarget, true))
         {
-            pBot->GetMotionMaster()->MoveChase(pTarget);
+            if (m_pMovementMgr)
+                m_pMovementMgr->Chase(pTarget, 0.0f, MovementPriority::PRIORITY_COMBAT);
+            else
+                pBot->GetMotionMaster()->MoveChase(pTarget);
             return GrindingResult::ENGAGED;
         }
     }

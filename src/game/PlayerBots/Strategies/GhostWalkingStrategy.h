@@ -14,6 +14,8 @@
 #include <vector>
 #include <ctime>
 
+class BotMovementManager;
+
 class GhostWalkingStrategy : public IBotStrategy
 {
 public:
@@ -34,7 +36,12 @@ public:
     // Reset state for reuse
     void Reset();
 
+    // Set movement manager (called by RandomBotAI after construction)
+    void SetMovementManager(BotMovementManager* pMoveMgr) { m_pMovementMgr = pMoveMgr; }
+
 private:
+    // Movement manager (set by RandomBotAI, centralized movement coordination)
+    BotMovementManager* m_pMovementMgr = nullptr;
     bool m_initialized = false;
     bool m_isWalkingToCorpse = false;
     std::vector<time_t> m_recentDeaths;  // Timestamps for death loop detection

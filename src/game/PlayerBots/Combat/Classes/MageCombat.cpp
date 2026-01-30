@@ -7,6 +7,7 @@
  */
 
 #include "MageCombat.h"
+#include "BotMovementManager.h"
 #include "CombatBotBaseAI.h"
 #include "../CombatHelpers.h"
 
@@ -17,7 +18,7 @@ MageCombat::MageCombat(CombatBotBaseAI* pAI)
 
 bool MageCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    return CombatHelpers::EngageCaster(pBot, pTarget, "MageCombat");
+    return CombatHelpers::EngageCaster(pBot, pTarget, "MageCombat", m_pMoveMgr);
 }
 
 void MageCombat::UpdateCombat(Player* pBot, Unit* pVictim)
@@ -25,7 +26,7 @@ void MageCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     if (!pVictim)
         return;
 
-    CombatHelpers::HandleRangedMovement(pBot, pVictim);
+    CombatHelpers::HandleRangedMovement(pBot, pVictim, 30.0f, m_pMoveMgr);
 
     // Frost Nova if enemy is close
     if (m_pAI->m_spells.mage.pFrostNova &&
@@ -61,7 +62,7 @@ void MageCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     }
 
     // Fallback if all spells failed
-    CombatHelpers::HandleCasterFallback(pBot, pVictim, "MageCombat");
+    CombatHelpers::HandleCasterFallback(pBot, pVictim, "MageCombat", m_pMoveMgr);
 }
 
 void MageCombat::UpdateOutOfCombat(Player* pBot)

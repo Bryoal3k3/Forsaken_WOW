@@ -1,6 +1,6 @@
 # RandomBot AI Development Progress
 
-## Project Status: Phase 5 COMPLETE (Travel System)
+## Project Status: Phase 6 COMPLETE (Movement Manager)
 
 | Phase | Status | Description |
 |-------|--------|-------------|
@@ -11,7 +11,8 @@
 | Phase 4 | ✅ Complete | Vendoring - sell items, repair gear |
 | Phase 4.5 | ✅ Complete | Combat system refactor - class-appropriate engagement |
 | Phase 5 | ✅ Complete | Travel system - find and travel to grind spots |
-| Phase 5.5 | 🟡 Testing | Auto-generated grind spots + local randomization |
+| Phase 5.5 | ✅ Complete | Auto-generated grind spots + local randomization |
+| Phase 6 | ✅ Complete | Centralized BotMovementManager |
 
 ### Phase 5 Features Implemented
 - **Out-leveled area detection**: Bot recognizes when no mobs within +/-2 levels exist (5 consecutive ticks)
@@ -37,6 +38,90 @@ All Phase 5 bugs have been fixed:
 - ✅ Bug #13: Ranged bots no longer freeze/stuck (2026-01-29)
 - 🟡 Low priority: Combat reactivity - bot ignores attackers while moving (Bug #8)
 - 🟡 Low priority: Hunter Auto Shot cooldown spam (Bug #12)
+
+---
+
+## 2026-01-30 - BotMovementManager Implementation (Phase 6 COMPLETE)
+
+### Overview
+Centralized all RandomBot movement into a single `BotMovementManager` class to fix:
+- Hill hugging (path smoothing)
+- Bot stacking (destination randomization)
+- Movement spam/jitter (duplicate detection)
+- Slow stuck detection (5 sec vs 30 sec)
+- Terrain issues (multi-Z search)
+- CC checks (won't move while stunned/rooted)
+
+### Architecture
+```
+RandomBotAI
+├── BotMovementManager (NEW - single point of control)
+│   ├── Priority system (IDLE < WANDER < NORMAL < COMBAT < FORCED)
+│   ├── Duplicate detection (prevents MoveChase spam)
+│   ├── CC validation (won't issue moves while stunned/rooted)
+│   ├── Multi-Z height search (caves/buildings)
+│   ├── Path smoothing (skip unnecessary waypoints)
+│   └── 5-second stuck detection with micro-recovery
+│   ↓
+└── MotionMaster (engine calls)
+```
+
+### Key Features
+| Feature | Purpose |
+|---------|---------|
+| `MoveTo()` | Point movement with Z validation |
+| `Chase()` | Combat movement with duplicate detection |
+| `MoveNear()` | 8-angle search to prevent stacking |
+| `MoveAway()` | Flee mechanism (8-angle search away from threat) |
+| `SmoothPath()` | Skip waypoints when LoS exists |
+| `SearchBestZ()` | Try 5 heights (±8, ±16, ±24, ±32, ±40 yards) |
+| `Update()` | Stuck detection every 1 sec, micro-recovery at 2 checks |
+
+### Files Created
+| File | Purpose |
+|------|---------|
+| `BotMovementManager.h` | Header with enums, structs, class declaration |
+| `BotMovementManager.cpp` | Full implementation (~400 LOC) |
+
+### Files Modified
+| File | Changes |
+|------|---------|
+| `RandomBotAI.h` | Added manager member and accessor |
+| `RandomBotAI.cpp` | Initialize manager, call Update(), wire to strategies |
+| `CMakeLists.txt` | Added new source files |
+| `Combat/IClassCombat.h` | Added SetMovementManager() to interface |
+| `Combat/BotCombatMgr.h/cpp` | Pass manager to class handlers |
+| `Combat/CombatHelpers.h` | All functions accept optional BotMovementManager* |
+| `Combat/Classes/*.cpp` | All 9 class handlers use movement manager |
+| `Strategies/GrindingStrategy.h/cpp` | Uses movement manager for fallback chase |
+| `Strategies/TravelingStrategy.h/cpp` | Uses MoveTo() + path smoothing |
+| `Strategies/VendoringStrategy.h/cpp` | Uses MoveTo() for vendor navigation |
+| `Strategies/GhostWalkingStrategy.h/cpp` | Uses MoveTo() for corpse walk |
+| `Strategies/LootingBehavior.h/cpp` | Uses MoveTo() for loot approach |
+
+### Integration Pattern
+Each strategy/handler receives movement manager via `SetMovementManager()` during initialization:
+```cpp
+// In RandomBotAI one-time init:
+m_movementMgr = std::make_unique<BotMovementManager>(me);
+if (m_combatMgr)
+    m_combatMgr->SetMovementManager(m_movementMgr.get());
+if (m_strategy)
+    m_strategy->SetMovementManager(m_movementMgr.get());
+// ... etc for all strategies
+```
+
+### Build Errors Fixed During Implementation
+| Error | Fix |
+|-------|-----|
+| Vector3 redefinition | Use `G3D::Vector3` instead of custom struct |
+| GetPhaseMask() doesn't exist | Remove phase mask from LoS calls (vanilla has no phasing) |
+| frand redefinition | Remove static frand (already in Util.h) |
+
+### Status
+✅ Compiles and builds successfully
+✅ All strategies migrated to use movement manager
+✅ All 9 class combat handlers migrated
 
 ---
 
@@ -944,5 +1029,5 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ---
 
-*Last Updated: 2026-01-29*
-*Current State: Phase 5.5 testing. Bug #13 (ranged freeze) FIXED. Auto-generated 2,684 grind spots. `.bot status` debug command added.*
+*Last Updated: 2026-01-30*
+*Current State: Phase 6 complete. BotMovementManager implemented. All movement centralized through single manager.*

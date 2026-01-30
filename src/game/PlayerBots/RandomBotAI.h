@@ -21,6 +21,7 @@ class GhostWalkingStrategy;
 class VendoringStrategy;
 class TravelingStrategy;
 class BotCombatMgr;
+class BotMovementManager;
 
 // Current action enum for debug
 enum class BotAction
@@ -68,6 +69,9 @@ public:
 
     // Combat manager accessor (for GrindingStrategy)
     BotCombatMgr* GetCombatMgr() { return m_combatMgr.get(); }
+
+    // Movement manager accessor (centralized movement coordination)
+    BotMovementManager* GetMovementManager() { return m_movementMgr.get(); }
 
     // Traveling strategy accessor (for GhostWalkingStrategy)
     TravelingStrategy* GetTravelingStrategy() { return m_travelingStrategy.get(); }
@@ -128,6 +132,9 @@ private:
 
     // Combat manager (handles class-specific engagement and rotations)
     std::unique_ptr<BotCombatMgr> m_combatMgr;
+
+    // Movement manager (centralized movement coordination)
+    std::unique_ptr<BotMovementManager> m_movementMgr;
 };
 
 #endif // MANGOS_RANDOMBOTAI_H

@@ -13,6 +13,7 @@
 #include "SharedDefines.h"  // For CLASS_* constants
 
 class BotCombatMgr;
+class BotMovementManager;
 class Creature;
 class Player;
 
@@ -48,6 +49,9 @@ public:
     // Set combat manager (called by RandomBotAI after construction)
     void SetCombatMgr(BotCombatMgr* pCombatMgr) { m_pCombatMgr = pCombatMgr; }
 
+    // Set movement manager (called by RandomBotAI after construction)
+    void SetMovementManager(BotMovementManager* pMoveMgr) { m_pMovementMgr = pMoveMgr; }
+
     // IBotStrategy interface
     bool Update(Player* pBot, uint32 diff) override;
     void OnEnterCombat(Player* pBot) override;
@@ -70,6 +74,9 @@ private:
 
     // Combat manager (set by RandomBotAI, avoids dynamic_cast in hot path)
     BotCombatMgr* m_pCombatMgr = nullptr;
+
+    // Movement manager (set by RandomBotAI, centralized movement coordination)
+    BotMovementManager* m_pMovementMgr = nullptr;
 
     // Consecutive "no mobs" counter for travel system
     uint32 m_noMobsCount = 0;

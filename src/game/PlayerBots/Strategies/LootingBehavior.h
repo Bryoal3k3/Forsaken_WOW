@@ -15,6 +15,7 @@
 
 class Player;
 class Creature;
+class BotMovementManager;
 
 class LootingBehavior
 {
@@ -33,7 +34,12 @@ public:
     // Reset state (call on bot death or other edge cases)
     void Reset();
 
+    // Set movement manager (called by RandomBotAI after construction)
+    void SetMovementManager(BotMovementManager* pMoveMgr) { m_pMovementMgr = pMoveMgr; }
+
 private:
+    // Movement manager (set by RandomBotAI, centralized movement coordination)
+    BotMovementManager* m_pMovementMgr = nullptr;
     Creature* FindLootableCorpse(Player* pBot);
     void LootCorpse(Player* pBot, Creature* pCorpse);
 

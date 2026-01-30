@@ -21,6 +21,13 @@
 BotCombatMgr::BotCombatMgr() = default;
 BotCombatMgr::~BotCombatMgr() = default;
 
+void BotCombatMgr::SetMovementManager(BotMovementManager* pMoveMgr)
+{
+    m_pMovementMgr = pMoveMgr;
+    if (m_handler)
+        m_handler->SetMovementManager(pMoveMgr);
+}
+
 void BotCombatMgr::Initialize(Player* pBot, CombatBotBaseAI* pAI)
 {
     if (!pBot || !pAI)

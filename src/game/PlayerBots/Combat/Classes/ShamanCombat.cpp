@@ -7,6 +7,7 @@
  */
 
 #include "ShamanCombat.h"
+#include "BotMovementManager.h"
 #include "CombatBotBaseAI.h"
 #include "../CombatHelpers.h"
 
@@ -17,7 +18,7 @@ ShamanCombat::ShamanCombat(CombatBotBaseAI* pAI)
 
 bool ShamanCombat::Engage(Player* pBot, Unit* pTarget)
 {
-    return CombatHelpers::EngageMelee(pBot, pTarget, "ShamanCombat");
+    return CombatHelpers::EngageMelee(pBot, pTarget, "ShamanCombat", m_pMoveMgr);
 }
 
 void ShamanCombat::UpdateCombat(Player* pBot, Unit* pVictim)
@@ -27,7 +28,7 @@ void ShamanCombat::UpdateCombat(Player* pBot, Unit* pVictim)
 
     // Ensure we keep chasing if not in melee range (handles movement interruptions)
     // Shaman is hybrid but engages as melee, so use melee movement
-    CombatHelpers::HandleMeleeMovement(pBot, pVictim);
+    CombatHelpers::HandleMeleeMovement(pBot, pVictim, m_pMoveMgr);
 
     // Earth Shock
     if (m_pAI->m_spells.shaman.pEarthShock &&

@@ -18,6 +18,7 @@
 
 class Player;
 class VendoringStrategy;
+class BotMovementManager;
 struct DangerZone;
 
 // Cached grind spot data (loaded once at startup)
@@ -81,9 +82,15 @@ public:
     // Set vendoring strategy reference (for pre-travel vendor trigger)
     void SetVendoringStrategy(VendoringStrategy* pVendoring) { m_pVendoringStrategy = pVendoring; }
 
+    // Set movement manager (called by RandomBotAI after construction)
+    void SetMovementManager(BotMovementManager* pMoveMgr) { m_pMovementMgr = pMoveMgr; }
+
 private:
     // Vendoring strategy reference (for pre-travel vendor trigger)
     VendoringStrategy* m_pVendoringStrategy = nullptr;
+
+    // Movement manager (set by RandomBotAI, centralized movement coordination)
+    BotMovementManager* m_pMovementMgr = nullptr;
 
     // Static cache (shared across all bot instances)
     static std::vector<GrindSpotData> s_grindSpotCache;

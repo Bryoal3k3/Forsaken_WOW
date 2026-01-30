@@ -7,6 +7,7 @@
  */
 
 #include "HunterCombat.h"
+#include "BotMovementManager.h"
 #include "CombatBotBaseAI.h"
 #include "Player.h"
 #include "Unit.h"
@@ -27,7 +28,10 @@ bool HunterCombat::Engage(Player* pBot, Unit* pTarget)
     {
         // Chase directly to target - HandleRangedMovement() will stop at cast range
         // NOTE: Don't use offset - it causes pathfinding issues that make bot stop early
-        pBot->GetMotionMaster()->MoveChase(pTarget);
+        if (m_pMoveMgr)
+            m_pMoveMgr->Chase(pTarget, 0.0f, MovementPriority::PRIORITY_COMBAT);
+        else
+            pBot->GetMotionMaster()->MoveChase(pTarget);
 
         sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[HunterCombat] %s engaging %s (Attack success, moving to range)",
             pBot->GetName(), pTarget->GetName());
@@ -44,14 +48,17 @@ void HunterCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     if (!pVictim)
         return;
 
-    CombatHelpers::HandleRangedMovement(pBot, pVictim);
+    CombatHelpers::HandleRangedMovement(pBot, pVictim, 30.0f, m_pMoveMgr);
 
     // Melee combat - when victim can hit us (deadzone)
     if (pVictim->CanReachWithMeleeAutoAttack(pBot))
     {
         // Enable melee auto-attack and stay on target
         pBot->Attack(pVictim, true);
-        pBot->GetMotionMaster()->MoveChase(pVictim);
+        if (m_pMoveMgr)
+            m_pMoveMgr->Chase(pVictim, 0.0f, MovementPriority::PRIORITY_COMBAT);
+        else
+            pBot->GetMotionMaster()->MoveChase(pVictim);
 
         // Wing Clip to snare
         if (m_pAI->m_spells.hunter.pWingClip &&

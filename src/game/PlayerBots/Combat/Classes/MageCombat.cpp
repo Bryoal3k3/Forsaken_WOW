@@ -59,6 +59,9 @@ void MageCombat::UpdateCombat(Player* pBot, Unit* pVictim)
         if (m_pAI->DoCastSpell(pVictim, m_pAI->m_spells.mage.pFireball) == SPELL_CAST_OK)
             return;
     }
+
+    // Fallback if all spells failed
+    CombatHelpers::HandleCasterFallback(pBot, pVictim, "MageCombat");
 }
 
 void MageCombat::UpdateOutOfCombat(Player* pBot)

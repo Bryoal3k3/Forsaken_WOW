@@ -2958,6 +2958,12 @@ AHBot.itemcount = 50
 #        How often the the server will check if there are enough bots spawned.
 #        Default: 60000 (1 minute)
 #
+#    RandomBot.DebugGrindSelection
+#        Enable console logging of grind spot selection for debugging bot travel behavior.
+#        Shows which spot was selected and how many nearby/distant options were available.
+#        Default: 0 - off
+#                 1 - on
+#
 #    PlayerBot.AllowSaving
 #        Enables saving of character progress when a real character is loaded.
 #        Default: 0 - off
@@ -3013,6 +3019,7 @@ RandomBot.Enable = 0
 RandomBot.MinBots = 0
 RandomBot.MaxBots = 0
 RandomBot.Refresh = 60000
+RandomBot.DebugGrindSelection = 0
 
 PlayerBot.AllowSaving = 0
 PlayerBot.Debug = 0

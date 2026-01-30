@@ -132,10 +132,12 @@ src/game/PlayerBots/
 
 ### Database Tables
 ```
-realmd.account          ← Bot accounts (RNDBOT001, RNDBOT002...)
-characters.characters   ← Bot character data (name, class, level, position)
-characters.playerbot    ← Links char_guid to AI type string
-characters.grind_spots  ← Level/faction-appropriate grind locations for travel
+realmd.account              ← Bot accounts (RNDBOT001, RNDBOT002...)
+characters.characters       ← Bot character data (name, class, level, position)
+characters.playerbot        ← Links char_guid to AI type string
+characters.grind_spots      ← 2,684 auto-generated grind locations (from creature spawns)
+characters.grind_spots_backup ← Original 23 manual spots (backup)
+characters.zone_levels      ← 39 zone coordinate/level boundaries for validation
 ```
 
 ### Bot Generation Flow (First Launch)
@@ -255,4 +257,4 @@ To enable: Uncomment the danger zone code in `RandomBotAI.cpp:UpdateOutOfCombatA
 
 ---
 
-*Last Updated: 2026-01-26 (Bug #11 fix - bots now properly loot and buff)*
+*Last Updated: 2026-01-28 (Phase 5.5 - auto-generated grind spots + local randomization)*

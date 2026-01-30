@@ -103,6 +103,7 @@ class PlayerBotMgr
         bool IsPermanentBot(uint32 playerGuid);
         bool IsChatBot(uint32 playerGuid);
         bool IsSavingAllowed() { return m_confAllowSaving; }
+        bool IsDebugGrindSelectionEnabled() const { return m_confDebugGrindSelection; }
 
         uint32 GenBotAccountId() { return ++m_maxAccountId; }
         PlayerBotStats& GetStats(){ return m_stats; }
@@ -130,6 +131,7 @@ class PlayerBotMgr
         bool m_confEnableRandomBots;
         bool m_confPurgeRandomBots;
         bool m_confBattleBotAutoJoin;
+        bool m_confDebugGrindSelection;
 };
 
 #define sPlayerBotMgr MaNGOS::Singleton<PlayerBotMgr>::Instance()

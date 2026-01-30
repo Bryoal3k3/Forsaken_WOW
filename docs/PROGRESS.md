@@ -11,6 +11,7 @@
 | Phase 4 | ✅ Complete | Vendoring - sell items, repair gear |
 | Phase 4.5 | ✅ Complete | Combat system refactor - class-appropriate engagement |
 | Phase 5 | ✅ Complete | Travel system - find and travel to grind spots |
+| Phase 5.5 | 🟡 Testing | Auto-generated grind spots + local randomization |
 
 ### Phase 5 Features Implemented
 - **Out-leveled area detection**: Bot recognizes when no mobs within +/-2 levels exist (5 consecutive ticks)
@@ -33,7 +34,131 @@ All Phase 5 bugs have been fixed:
 - ✅ Bug #2: Bots no longer walk onto steep slopes (2026-01-26)
 - ✅ Bug #5: BuildPointPath log spam fixed (2026-01-26)
 - ✅ Bug #11: Bots now properly loot and buff (2026-01-26)
+- ✅ Bug #12: Ranged bots no longer freeze/stuck (2026-01-29)
 - 🟡 Low priority: Combat reactivity - bot ignores attackers while moving (Bug #8)
+
+---
+
+## 2026-01-29 - CRITICAL BUG FIX: Ranged Bots Freezing (Bug #12)
+
+### Problem
+Ranged bots (Mage, Warlock, Priest, Hunter) would frequently freeze in place after selecting a target. They had a victim set, Motion type was CHASE, but they weren't moving or casting. Attacking their target would "wake them up".
+
+### Root Cause (Deep in ChaseMovementGenerator)
+`MoveChase(target, 28.0f)` was used to chase to 28 yards offset. The ChaseMovementGenerator:
+1. Calculates position 28 yards FROM target
+2. PathFinder tries to path to that calculated offset position
+3. Path often comes back as `PATHFIND_INCOMPLETE` (common for longer/awkward paths)
+4. Bot has Line of Sight to target
+5. Code at `TargetedMovementGenerator.cpp:217-231` sees: incomplete path + has LoS → **STOPS MOVING**
+
+The assumption was "if you can see the target, you don't need to move" - but that's wrong for ranged classes at 47 yards!
+
+### Solution
+Remove offset from all MoveChase calls for ranged classes. Chase directly to target and let `HandleRangedMovement()` stop the bot at casting range.
+
+### Files Modified
+| File | Change |
+|------|--------|
+| `Combat/CombatHelpers.h` | `EngageCaster()`: `MoveChase(target, 28.0f)` → `MoveChase(target)` |
+| `Combat/CombatHelpers.h` | `HandleRangedMovement()`: `MoveChase(victim, 28.0f)` → `MoveChase(victim)` |
+| `Combat/CombatHelpers.h` | `HandleCasterFallback()`: `MoveChase(victim, 28.0f)` → `MoveChase(victim)` |
+| `Combat/Classes/HunterCombat.cpp` | `Engage()`: `MoveChase(target, 25.0f)` → `MoveChase(target)` |
+
+### Additional Fixes (Same Session)
+| Fix | Description |
+|-----|-------------|
+| Caster fallback | Added `HandleCasterFallback()` - wand then melee when all spells fail |
+| Hunter Auto Shot | Removed `IsMoving()` check that blocked Auto Shot initiation |
+| HandleRangedMovement | Check motion type, not just `IsMoving()` |
+| Priest heal-lock | Removed early return that blocked damage spells after heal attempt |
+
+### New Debug Command: `.bot status`
+Added GM command to diagnose stuck bots:
+```
+=== Bot Status: Graveleth ===
+Level 2 Warlock | HP: 78/78 (100%)
+Mana: 133/133 (100%)
+Position: (1737.9, 1433.9, 114.0) Map 0
+[State] Action: GRINDING | Strategy: Grinding
+Moving: NO | Casting: NO
+[Victim] Scarlet Convert (100% HP) | Dist: 47.1 | LoS: YES | InCombat: NO
+[Motion] Type: CHASE
+```
+
+**Files Created/Modified for Debug Command:**
+- `Chat.h` - Added `HandleBotStatusCommand` declaration
+- `Chat.cpp` - Added "status" to `botCommandTable`
+- `RandomBotAI.h` - Added `BotAction` enum, `BotStatusInfo` struct, `GetStatusInfo()`
+- `RandomBotAI.cpp` - Implemented `GetStatusInfo()`
+- `PlayerBotMgr.cpp` - Implemented `HandleBotStatusCommand()`
+
+### Result
+10+ minutes of testing across all caster bots on server - zero stuck bots. The freeze bug is fixed.
+
+---
+
+## 2026-01-28 - Auto-Generated Grind Spots (Phase 5.5) - TESTING
+
+### Overview
+Replaced manual 23-entry `grind_spots` table with 2,684 auto-generated spots derived from creature spawn data. Bots now have full 1-60 coverage on both continents.
+
+### What Was Done
+
+**1. Database Analysis & Generation**
+- Queried `creature` + `creature_template` tables for grindable mobs
+- Filter criteria:
+  - `loot_id > 0` (has loot - gold OR items, includes beasts)
+  - `rank = 0` (normal mob, not elite)
+  - `type != 8` (not critter)
+  - `flags_extra NOT IN (1024, 2)` (not guards or civilians)
+  - `patch_min <= 10 AND patch_max >= 10` (1.12 patch only)
+- Clustered spawns into 200-yard grid cells
+- Used `STDDEV(level) < 5` to ensure level consistency per spot
+- Bot level range per spot: mob_level - 3 to mob_level + 1
+
+**2. Zone Validation System**
+- Created `zone_levels` table (39 zones) from quest-creature mappings
+- Cross-referenced spot coordinates with zone boundaries
+- Excluded 21 dangerous spots (level mismatches at zone borders)
+
+**3. Travel Randomization (Code Change)**
+- Modified `TravelingStrategy::FindGrindSpot()` in `TravelingStrategy.cpp`
+- Two-phase search:
+  1. **Local spots** (within 800 yards) - randomly pick from valid options
+  2. **Distant spots** (if no local) - weighted random favoring closer
+- Small offset (±25 yards) prevents bots stacking on exact same point
+- Prevents "train" behavior where all bots go to same spot
+
+### Database Tables
+
+| Table | Location | Purpose |
+|-------|----------|---------|
+| `grind_spots` | characters DB | 2,684 grind locations (was 23) |
+| `grind_spots_backup` | characters DB | Original manual spots backup |
+| `zone_levels` | characters DB | 39 zone coordinate/level boundaries |
+
+### Files Modified
+- `TravelingStrategy.cpp` - Local randomization + weighted distant selection
+
+### Files Created
+- `docs/grind_spots_report.tsv` - Full spot list with mob names/levels
+
+### Statistics
+
+| Metric | Value |
+|--------|-------|
+| Total spots | 2,684 |
+| Eastern Kingdoms | 1,088 |
+| Kalimdor | 1,596 |
+| Level coverage | 1-60 |
+| Dangerous spots excluded | 21 |
+
+### Status: 🟡 TESTING
+Awaiting verification that:
+- Bots properly spread out within zones (no train behavior)
+- Level progression works across all levels
+- No bots sent to dangerous mismatched zones
 
 ---
 
@@ -816,5 +941,5 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ---
 
-*Last Updated: 2026-01-26*
-*Current State: Phase 5 complete. All major bugs fixed. Bots loot, buff, path around steep terrain, and enter caves/buildings.*
+*Last Updated: 2026-01-29*
+*Current State: Phase 5.5 testing. Ranged bot freeze bug FIXED. Auto-generated 2,684 grind spots. `.bot status` debug command added.*

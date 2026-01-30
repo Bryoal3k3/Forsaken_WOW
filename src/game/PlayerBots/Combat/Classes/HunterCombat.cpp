@@ -25,9 +25,9 @@ bool HunterCombat::Engage(Player* pBot, Unit* pTarget)
     // This sets GetVictim() and adds us to mob's attacker list
     if (pBot->Attack(pTarget, false))
     {
-        // Move to optimal ranged position (~25 yards)
-        // Auto Shot will be started in UpdateCombat once positioned
-        pBot->GetMotionMaster()->MoveChase(pTarget, 25.0f);
+        // Chase directly to target - HandleRangedMovement() will stop at cast range
+        // NOTE: Don't use offset - it causes pathfinding issues that make bot stop early
+        pBot->GetMotionMaster()->MoveChase(pTarget);
 
         sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[HunterCombat] %s engaging %s (Attack success, moving to range)",
             pBot->GetName(), pTarget->GetName());
@@ -82,7 +82,6 @@ void HunterCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     // Maintain Auto Shot (only start if not already auto-shooting)
     if (pBot->HasSpell(SPELL_AUTO_SHOT) &&
         !pBot->GetCurrentSpell(CURRENT_AUTOREPEAT_SPELL) &&
-        !pBot->IsMoving() &&
         !pBot->IsNonMeleeSpellCasted())
     {
         pBot->CastSpell(pVictim, SPELL_AUTO_SHOT, false);

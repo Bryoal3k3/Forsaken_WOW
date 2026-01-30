@@ -10,6 +10,7 @@
 #include "TravelingStrategy.h"
 #include "VendoringStrategy.h"
 #include "DangerZoneCache.h"
+#include "PlayerBotMgr.h"
 #include "Player.h"
 #include "MotionMaster.h"
 #include "Log.h"
@@ -316,10 +317,11 @@ bool TravelingStrategy::FindGrindSpot(Player* pBot)
     float px = pBot->GetPositionX();
     float py = pBot->GetPositionY();
 
-    // Search cache for best matching spot
-    // Priority: highest priority first, then closest distance as tiebreaker
-    GrindSpotData const* bestSpot = nullptr;
-    float bestScore = FLT_MAX;  // Lower is better (we'll use -priority + normalized_distance)
+    // Two-phase search: first look for nearby spots (same zone), then expand if needed
+    const float LOCAL_RADIUS_SQ = 800.0f * 800.0f;  // ~800 yards = same zone/area
+
+    std::vector<GrindSpotData const*> nearbySpots;
+    std::vector<GrindSpotData const*> distantSpots;
 
     for (GrindSpotData const& spot : s_grindSpotCache)
     {
@@ -335,32 +337,96 @@ bool TravelingStrategy::FindGrindSpot(Player* pBot)
         if (spot.faction != 0 && spot.faction != faction)
             continue;
 
-        // Calculate distance squared (avoid sqrt for comparison)
+        // Calculate distance squared
         float dx = spot.x - px;
         float dy = spot.y - py;
         float distSq = dx * dx + dy * dy;
 
-        // Score: priority is primary (higher = better, so negate), distance is secondary
-        // Multiply priority by large factor to ensure it dominates
-        float score = -static_cast<float>(spot.priority) * 1000000.0f + distSq;
+        // Categorize by distance
+        if (distSq <= LOCAL_RADIUS_SQ)
+            nearbySpots.push_back(&spot);
+        else
+            distantSpots.push_back(&spot);
+    }
 
-        if (score < bestScore)
+    // Prefer nearby spots (stay in current zone, randomize between local options)
+    GrindSpotData const* chosenSpot = nullptr;
+
+    if (!nearbySpots.empty())
+    {
+        // Randomly pick from nearby spots (avoids "train" behavior)
+        chosenSpot = nearbySpots[urand(0, nearbySpots.size() - 1)];
+
+        if (sPlayerBotMgr.IsDebugGrindSelectionEnabled())
         {
-            bestScore = score;
-            bestSpot = &spot;
+            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                "[GRIND] %s selected '%s' from %zu nearby, %zu distant spots",
+                pBot->GetName(), chosenSpot->name.c_str(),
+                nearbySpots.size(), distantSpots.size());
+        }
+    }
+    else if (!distantSpots.empty())
+    {
+        // No nearby spots - need to travel to new zone
+        // Pick closest distant spot (weighted random favoring closer)
+        if (distantSpots.size() == 1)
+        {
+            chosenSpot = distantSpots[0];
+        }
+        else
+        {
+            // Weight by inverse distance - closer spots more likely
+            std::vector<float> weights;
+            float totalWeight = 0.0f;
+
+            for (GrindSpotData const* spot : distantSpots)
+            {
+                float dx = spot->x - px;
+                float dy = spot->y - py;
+                float distSq = dx * dx + dy * dy;
+                float weight = 1.0f / (1.0f + distSq / 100000.0f);
+                weights.push_back(weight);
+                totalWeight += weight;
+            }
+
+            float roll = (float)urand(0, 10000) / 10000.0f * totalWeight;
+            float cumulative = 0.0f;
+
+            for (size_t i = 0; i < distantSpots.size(); ++i)
+            {
+                cumulative += weights[i];
+                if (roll <= cumulative)
+                {
+                    chosenSpot = distantSpots[i];
+                    break;
+                }
+            }
+
+            if (!chosenSpot)
+                chosenSpot = distantSpots[0];
+        }
+
+        if (sPlayerBotMgr.IsDebugGrindSelectionEnabled())
+        {
+            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                "[GRIND] %s traveling to '%s' (%zu distant spots, no nearby)",
+                pBot->GetName(), chosenSpot->name.c_str(), distantSpots.size());
         }
     }
 
-    if (bestSpot)
-    {
-        m_targetX = bestSpot->x;
-        m_targetY = bestSpot->y;
-        m_targetZ = bestSpot->z;
-        m_targetName = bestSpot->name;
-        return true;
-    }
+    if (!chosenSpot)
+        return false;
 
-    return false;
+    // Add small random offset to avoid bots stacking on exact same point
+    float offsetX = (float)(irand(-25, 25));
+    float offsetY = (float)(irand(-25, 25));
+
+    m_targetX = chosenSpot->x + offsetX;
+    m_targetY = chosenSpot->y + offsetY;
+    m_targetZ = chosenSpot->z;
+    m_targetName = chosenSpot->name;
+
+    return true;
 }
 
 bool TravelingStrategy::IsAtDestination(Player* pBot) const

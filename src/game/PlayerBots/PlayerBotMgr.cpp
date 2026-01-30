@@ -19,6 +19,7 @@
 #include "Language.h"
 #include "Spell.h"
 #include "RandomBotGenerator.h"
+#include "RandomBotAI.h"
 #include "Strategies/VendoringStrategy.h"
 #include "Strategies/TravelingStrategy.h"
 #include "DangerZoneCache.h"
@@ -60,6 +61,7 @@ void PlayerBotMgr::LoadConfig()
     m_confMinRandomBots = sConfig.GetIntDefault("RandomBot.MinBots", 3);
     m_confMaxRandomBots = sConfig.GetIntDefault("RandomBot.MaxBots", 10);
     m_confRandomBotsRefresh = sConfig.GetIntDefault("RandomBot.Refresh", 60000);
+    m_confDebugGrindSelection = sConfig.GetBoolDefault("RandomBot.DebugGrindSelection", false);
     m_confAllowSaving = sConfig.GetBoolDefault("PlayerBot.AllowSaving", false);
     m_confDebug = sConfig.GetBoolDefault("PlayerBot.Debug", false);
     m_confUpdateDiff = sConfig.GetIntDefault("PlayerBot.UpdateMs", 10000);
@@ -800,6 +802,132 @@ bool ChatHandler::HandleBotInfoCommand(char * args)
 bool ChatHandler::HandleBotStartCommand(char * args)
 {
     sPlayerBotMgr.Start();
+    return true;
+}
+
+bool ChatHandler::HandleBotStatusCommand(char* args)
+{
+    Player* target = GetSelectedPlayer();
+    if (!target)
+    {
+        SendSysMessage("No player selected. Target a bot first.");
+        return false;
+    }
+
+    if (!target->IsBot())
+    {
+        PSendSysMessage("%s is not a bot.", target->GetName());
+        return false;
+    }
+
+    // Get the bot AI
+    PlayerBotEntry* entry = target->GetSession()->GetBot();
+    if (!entry || !entry->ai)
+    {
+        SendSysMessage("Could not get bot AI.");
+        return false;
+    }
+
+    RandomBotAI* botAI = dynamic_cast<RandomBotAI*>(entry->ai.get());
+    if (!botAI)
+    {
+        SendSysMessage("This bot is not a RandomBotAI.");
+        return false;
+    }
+
+    // Get status info
+    BotStatusInfo status = botAI->GetStatusInfo();
+
+    // Convert action enum to string
+    const char* actionStr = "UNKNOWN";
+    switch (status.currentAction)
+    {
+        case BotAction::IDLE:          actionStr = "IDLE"; break;
+        case BotAction::GRINDING:      actionStr = "GRINDING"; break;
+        case BotAction::COMBAT:        actionStr = "COMBAT"; break;
+        case BotAction::LOOTING:       actionStr = "LOOTING"; break;
+        case BotAction::RESTING:       actionStr = "RESTING"; break;
+        case BotAction::TRAVELING:     actionStr = "TRAVELING"; break;
+        case BotAction::VENDORING:     actionStr = "VENDORING"; break;
+        case BotAction::GHOST_WALKING: actionStr = "GHOST_WALKING"; break;
+    }
+
+    // Output
+    PSendSysMessage("=== Bot Status: %s ===", target->GetName());
+    PSendSysMessage("Level %u %s | HP: %u/%u (%.0f%%)",
+        target->GetLevel(),
+        target->GetClass() == CLASS_WARRIOR ? "Warrior" :
+        target->GetClass() == CLASS_PALADIN ? "Paladin" :
+        target->GetClass() == CLASS_HUNTER ? "Hunter" :
+        target->GetClass() == CLASS_ROGUE ? "Rogue" :
+        target->GetClass() == CLASS_PRIEST ? "Priest" :
+        target->GetClass() == CLASS_SHAMAN ? "Shaman" :
+        target->GetClass() == CLASS_MAGE ? "Mage" :
+        target->GetClass() == CLASS_WARLOCK ? "Warlock" :
+        target->GetClass() == CLASS_DRUID ? "Druid" : "Unknown",
+        target->GetHealth(), target->GetMaxHealth(),
+        target->GetHealthPercent());
+
+    if (target->GetPowerType() == POWER_MANA)
+    {
+        PSendSysMessage("Mana: %u/%u (%.0f%%)",
+            target->GetPower(POWER_MANA), target->GetMaxPower(POWER_MANA),
+            target->GetPowerPercent(POWER_MANA));
+    }
+
+    PSendSysMessage("Position: (%.1f, %.1f, %.1f) Map %u",
+        target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(),
+        target->GetMapId());
+
+    PSendSysMessage("[State] Action: %s | Strategy: %s",
+        actionStr, status.activeStrategy.c_str());
+
+    PSendSysMessage("Moving: %s | Casting: %s",
+        status.isMoving ? "YES" : "NO",
+        status.isCasting ? "YES" : "NO");
+
+    // Victim info (show even if not "in combat" - helps debug stuck bots)
+    Unit* victim = target->GetVictim();
+    if (victim)
+    {
+        float dist = target->GetDistance(victim);
+        bool hasLoS = target->IsWithinLOSInMap(victim);
+        PSendSysMessage("[Victim] %s (%.0f%% HP) | Dist: %.1f | LoS: %s | InCombat: %s",
+            victim->GetName(),
+            victim->GetHealthPercent(),
+            dist,
+            hasLoS ? "YES" : "NO",
+            target->IsInCombat() ? "YES" : "NO");
+    }
+    else
+    {
+        PSendSysMessage("[Victim] None | InCombat: %s",
+            target->IsInCombat() ? "YES" : "NO");
+    }
+
+    // Motion info
+    if (target->GetMotionMaster())
+    {
+        MovementGeneratorType moveType = target->GetMotionMaster()->GetCurrentMovementGeneratorType();
+        const char* moveStr = "UNKNOWN";
+        switch (moveType)
+        {
+            case IDLE_MOTION_TYPE:      moveStr = "IDLE"; break;
+            case RANDOM_MOTION_TYPE:    moveStr = "RANDOM"; break;
+            case WAYPOINT_MOTION_TYPE:  moveStr = "WAYPOINT"; break;
+            case CONFUSED_MOTION_TYPE:  moveStr = "CONFUSED"; break;
+            case CHASE_MOTION_TYPE:     moveStr = "CHASE"; break;
+            case HOME_MOTION_TYPE:      moveStr = "HOME"; break;
+            case FLIGHT_MOTION_TYPE:    moveStr = "FLIGHT"; break;
+            case POINT_MOTION_TYPE:     moveStr = "POINT"; break;
+            case FLEEING_MOTION_TYPE:   moveStr = "FLEEING"; break;
+            case DISTRACT_MOTION_TYPE:  moveStr = "DISTRACT"; break;
+            case FOLLOW_MOTION_TYPE:    moveStr = "FOLLOW"; break;
+            default: break;
+        }
+        PSendSysMessage("[Motion] Type: %s", moveStr);
+    }
+
     return true;
 }
 

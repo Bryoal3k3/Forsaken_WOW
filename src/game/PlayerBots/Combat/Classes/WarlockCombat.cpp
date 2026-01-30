@@ -61,6 +61,9 @@ void WarlockCombat::UpdateCombat(Player* pBot, Unit* pVictim)
         if (m_pAI->DoCastSpell(pVictim, m_pAI->m_spells.warlock.pShadowBolt) == SPELL_CAST_OK)
             return;
     }
+
+    // Fallback if all spells failed
+    CombatHelpers::HandleCasterFallback(pBot, pVictim, "WarlockCombat");
 }
 
 void WarlockCombat::UpdateOutOfCombat(Player* pBot)

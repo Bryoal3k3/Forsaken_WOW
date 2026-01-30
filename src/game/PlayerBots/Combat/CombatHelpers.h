@@ -17,8 +17,12 @@
 
 namespace CombatHelpers
 {
-    // Caster engagement: Attack(false) + MoveChase at range
+    // Caster engagement: Attack(false) + MoveChase (no offset!)
     // Used by: Mage, Priest, Warlock
+    // NOTE: We use MoveChase without offset because MoveChase(target, 28.0f) calculates
+    // a position 28 yards FROM target, which can result in INCOMPLETE paths that cause
+    // the chase generator to stop (thinking bot has LoS and doesn't need to move).
+    // HandleRangedMovement() will stop the bot at casting range.
     inline bool EngageCaster(Player* pBot, Unit* pTarget, const char* className)
     {
         // Face target before attacking (fixes stuck bug when target is behind)
@@ -29,8 +33,8 @@ namespace CombatHelpers
         // First spell in UpdateCombat() will deal damage and fully engage
         if (pBot->Attack(pTarget, false))
         {
-            // Move into casting range (28 yards gives buffer for 30-yard spells)
-            pBot->GetMotionMaster()->MoveChase(pTarget, 28.0f);
+            // Chase directly to target - HandleRangedMovement() will stop us at cast range
+            pBot->GetMotionMaster()->MoveChase(pTarget);
 
             sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[%s] %s engaging %s (Attack success, moving to range)",
                 className, pBot->GetName(), pTarget->GetName());
@@ -75,22 +79,33 @@ namespace CombatHelpers
         bool inCastRange = dist <= castRange;
         bool hasLoS = pBot->IsWithinLOSInMap(pVictim);
 
-        // If OUT of cast range, move to casting distance
-        if (!inCastRange && !pBot->IsMoving())
+        // Check if we're actively chasing (not just "moving" in some other way)
+        bool isChasing = pBot->GetMotionMaster()->GetCurrentMovementGeneratorType() == CHASE_MOTION_TYPE;
+
+        // If OUT of cast range, ensure we're chasing
+        // NOTE: Use MoveChase without offset - offset causes pathfinding issues
+        // that result in bot stopping when it has LoS but is out of range
+        if (!inCastRange)
         {
-            pBot->GetMotionMaster()->MoveChase(pVictim, 28.0f);
+            if (!isChasing || !pBot->IsMoving())
+            {
+                pBot->GetMotionMaster()->MoveChase(pVictim);
+            }
             return;
         }
 
-        // If at range but NO line of sight, move all the way (through doors/cave entrances)
-        if (inCastRange && !hasLoS && !pBot->IsMoving())
+        // If at range but NO line of sight, move all the way (caves/buildings)
+        if (!hasLoS)
         {
-            pBot->GetMotionMaster()->MoveChase(pVictim);
+            if (!isChasing || !pBot->IsMoving())
+            {
+                pBot->GetMotionMaster()->MoveChase(pVictim);
+            }
             return;
         }
 
-        // Only stop movement if we're in casting range AND have LoS AND target isn't snared
-        if (inCastRange && hasLoS && !targetIsSnared && pBot->IsMoving())
+        // In range AND have LoS - stop if target isn't snared
+        if (!targetIsSnared && pBot->IsMoving())
         {
             pBot->StopMoving();
             pBot->GetMotionMaster()->Clear();
@@ -105,6 +120,37 @@ namespace CombatHelpers
         // This handles cases where movement gets interrupted (pathfinding edge cases, etc.)
         if (!pBot->CanReachWithMeleeAutoAttack(pVictim) && !pBot->IsMoving())
         {
+            pBot->GetMotionMaster()->MoveChase(pVictim);
+        }
+    }
+
+    // Wand shoot spell ID
+    #define SPELL_SHOOT_WAND 5019
+
+    // Fallback when all caster spells fail - try wand, then melee
+    // Used by: Mage, Priest, Warlock
+    inline void HandleCasterFallback(Player* pBot, Unit* pVictim, const char* className)
+    {
+        // Try wand first (if equipped and not already shooting)
+        if (pBot->HasSpell(SPELL_SHOOT_WAND) &&
+            !pBot->GetCurrentSpell(CURRENT_AUTOREPEAT_SPELL) &&
+            !pBot->IsNonMeleeSpellCasted())
+        {
+            pBot->CastSpell(pVictim, SPELL_SHOOT_WAND, false);
+            return;
+        }
+
+        // No wand or already shooting - melee fallback if in range
+        if (pBot->CanReachWithMeleeAutoAttack(pVictim))
+        {
+            if (!pBot->HasUnitState(UNIT_STATE_MELEE_ATTACKING))
+            {
+                pBot->Attack(pVictim, true);
+            }
+        }
+        else if (!pBot->IsMoving())
+        {
+            // Out of range and not moving - move closer (no offset!)
             pBot->GetMotionMaster()->MoveChase(pVictim);
         }
     }

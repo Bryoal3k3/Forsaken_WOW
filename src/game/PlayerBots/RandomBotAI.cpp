@@ -51,6 +51,59 @@ RandomBotAI::RandomBotAI()
 RandomBotAI::~RandomBotAI() = default;
 
 // ============================================================================
+// Debug Status (for .bot status command)
+// ============================================================================
+
+BotStatusInfo RandomBotAI::GetStatusInfo() const
+{
+    BotStatusInfo info;
+    info.targetX = 0;
+    info.targetY = 0;
+    info.targetZ = 0;
+    info.isMoving = me ? me->IsMoving() : false;
+    info.isCasting = me ? me->IsNonMeleeSpellCasted() : false;
+
+    // Determine current action
+    if (!me || !me->IsAlive())
+    {
+        info.currentAction = BotAction::GHOST_WALKING;
+        info.activeStrategy = "GhostWalkingStrategy";
+    }
+    else if (me->IsInCombat())
+    {
+        info.currentAction = BotAction::COMBAT;
+        info.activeStrategy = "Combat";
+    }
+    else if (m_isResting)
+    {
+        info.currentAction = BotAction::RESTING;
+        info.activeStrategy = "Resting";
+    }
+    else if (m_travelingStrategy && m_travelingStrategy->IsTraveling())
+    {
+        info.currentAction = BotAction::TRAVELING;
+        info.activeStrategy = "TravelingStrategy";
+        info.travelState = "WALKING";
+    }
+    else if (m_strategy)
+    {
+        info.currentAction = BotAction::GRINDING;
+        info.activeStrategy = m_strategy->GetName();
+    }
+    else
+    {
+        info.currentAction = BotAction::IDLE;
+        info.activeStrategy = "None";
+    }
+
+    // Get grind spot name from traveling strategy if available
+    info.grindSpotName = "Unknown";
+    info.travelState = "IDLE";
+
+    return info;
+}
+
+// ============================================================================
 // Core Functions
 // ============================================================================
 

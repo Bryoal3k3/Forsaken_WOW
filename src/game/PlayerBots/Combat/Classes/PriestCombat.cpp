@@ -37,11 +37,10 @@ void PriestCombat::UpdateCombat(Player* pBot, Unit* pVictim)
             return;
     }
 
-    // Heal self at low health
+    // Heal self at low health (try to heal, but continue to damage spells regardless)
     if (pBot->GetHealthPercent() < 40.0f)
     {
-        if (m_pAI->FindAndHealInjuredAlly(40.0f, 0.0f))
-            return;
+        m_pAI->FindAndHealInjuredAlly(40.0f, 0.0f);
     }
 
     // Shadow Word: Pain
@@ -68,6 +67,9 @@ void PriestCombat::UpdateCombat(Player* pBot, Unit* pVictim)
         if (m_pAI->DoCastSpell(pVictim, m_pAI->m_spells.priest.pSmite) == SPELL_CAST_OK)
             return;
     }
+
+    // Fallback if all spells failed
+    CombatHelpers::HandleCasterFallback(pBot, pVictim, "PriestCombat");
 }
 
 void PriestCombat::UpdateOutOfCombat(Player* pBot)

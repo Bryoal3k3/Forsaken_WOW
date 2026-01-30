@@ -22,6 +22,31 @@ class VendoringStrategy;
 class TravelingStrategy;
 class BotCombatMgr;
 
+// Current action enum for debug
+enum class BotAction
+{
+    IDLE,
+    GRINDING,
+    COMBAT,
+    LOOTING,
+    RESTING,
+    TRAVELING,
+    VENDORING,
+    GHOST_WALKING
+};
+
+// Status info struct for .bot status command
+struct BotStatusInfo
+{
+    BotAction currentAction;
+    std::string activeStrategy;
+    std::string grindSpotName;
+    std::string travelState;
+    float targetX, targetY, targetZ;
+    bool isMoving;
+    bool isCasting;
+};
+
 class RandomBotAI : public CombatBotBaseAI
 {
 public:
@@ -49,6 +74,9 @@ public:
 
     // Grinding strategy accessor (for travel system integration)
     GrindingStrategy* GetGrindingStrategy() { return static_cast<GrindingStrategy*>(m_strategy.get()); }
+
+    // Debug status for .bot status command
+    BotStatusInfo GetStatusInfo() const;
 
     // Class-specific combat routines
     void UpdateInCombatAI_Paladin() override;

@@ -88,6 +88,7 @@ ChatCommand * ChatHandler::getCommandTable()
         { "stop",       SEC_ADMINISTRATOR,      true,  &ChatHandler::HandleBotStopCommand,             "", nullptr },
         { "start",      SEC_ADMINISTRATOR,      true,  &ChatHandler::HandleBotStartCommand,            "", nullptr },
         { "ranadd",     SEC_ADMINISTRATOR,      true,  &ChatHandler::HandleBotAddRandomCommand,        "", nullptr },
+        { "status",     SEC_GAMEMASTER,         false, &ChatHandler::HandleBotStatusCommand,           "", nullptr },
         { nullptr,      0,                      false, nullptr,                                        "", nullptr },
     };
 

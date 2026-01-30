@@ -361,6 +361,26 @@ void RandomBotAI::UpdateInCombatAI()
     if (!pVictim)
         return;
 
+    // Check if we're stuck trying to reach a target (not in actual combat)
+    // This handles the case where GrindingStrategy set a victim but we can't reach it
+    if (!me->IsInCombat())
+    {
+        // Let GrindingStrategy check its approach timeout
+        if (GrindingStrategy* pGrinding = dynamic_cast<GrindingStrategy*>(m_strategy.get()))
+        {
+            if (pGrinding->GetState() == GrindState::APPROACHING)
+            {
+                // Run the approach timeout check
+                GrindingResult result = pGrinding->UpdateGrinding(me, 0);
+                if (result == GrindingResult::BUSY)
+                {
+                    // Timeout triggered - target was cleared, exit combat path
+                    return;
+                }
+            }
+        }
+    }
+
     // Delegate combat to the combat manager
     m_combatMgr->UpdateCombat(me, pVictim);
 }

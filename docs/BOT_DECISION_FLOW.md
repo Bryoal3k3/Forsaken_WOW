@@ -158,13 +158,25 @@ if (grindResult == NO_TARGETS && noMobsCount >= 5)
 
 | Constant | Value | Purpose |
 |----------|-------|---------|
-| `SEARCH_RANGE_CLOSE` | 50 yards | First tier - quick local search |
-| `SEARCH_RANGE_FAR` | 150 yards | Second tier - full range if close is empty |
-| `LEVEL_RANGE` | ±2 levels | Valid mob level range |
+| `SEARCH_RANGE` | 75 yards | Scan radius for mobs |
+| `LEVEL_RANGE` | 2 | Attack same level or up to 2 below (no higher) |
+| `APPROACH_TIMEOUT_MS` | 30 seconds | Give up if can't reach target |
 | `BACKOFF_MAX_LEVEL` | 3 | Max backoff level (8 second interval) |
 
+**State Machine:**
+```
+IDLE → Scan mobs → Pick random → Validate path → APPROACHING → IN_COMBAT → IDLE
+                                                       |
+                                                TIMEOUT (30s) → Clear target → IDLE
+```
+
+**Target Selection:**
+- Scans ALL valid mobs in 75 yard radius
+- Validates path BEFORE committing (rejects `endPoly=0` targets)
+- Picks randomly from valid candidates (not just nearest)
+- Only attacks same level or lower (up to 2 levels below)
+
 **Adaptive Search Behavior:**
-- Searches close range (50yd) first, then far range (150yd) if needed
 - When no mobs found, applies exponential backoff: 1s → 2s → 4s → 8s
 - Resets to fast searching when target found or combat ends
 
@@ -396,4 +408,4 @@ TravelingStrategy::StartTravel()
 
 ---
 
-*Last Updated: 2026-01-30 (Added BotMovementManager section)*
+*Last Updated: 2026-01-30 (GrindingStrategy refactor - state machine, 30s timeout, random target selection)*

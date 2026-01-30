@@ -1,6 +1,40 @@
 # Current Bug Tracker
 
-## Status: 3 ACTIVE BUGS, Bug #13 FIXED (2026-01-29)
+## Status: 2 ACTIVE BUGS, Bug #15 FIXED (2026-01-30)
+
+---
+
+## Bug #15: Bots Stuck Forever on Unreachable Targets - FIXED
+
+**Status**: ✅ FIXED (2026-01-30)
+
+**Symptom**: Bots would get stuck forever trying to reach targets on mountains or steep terrain:
+- Bot selected target with `endPoly=0` (no navmesh at target location)
+- Motion type showed CHASE but bot wasn't moving
+- Bot would slowly "shimmy" away from target (micro-recovery)
+- Distance to target kept increasing (159 yards → 186 yards → ...)
+- Infinite loop with `endPoly=0` error spam in console
+
+**Root Cause**:
+1. GrindingStrategy set victim via `Attack()` → `GetVictim()` returns target
+2. RandomBotAI checks `if (inCombat || me->GetVictim())` → goes to `UpdateInCombatAI()`
+3. But GrindingStrategy's timeout check was in `UpdateOutOfCombatAI()` - **never ran!**
+4. Combat handlers kept trying MoveChase, failing, triggering micro-recovery
+5. No give-up mechanism
+
+**Fix - Complete GrindingStrategy Rewrite**:
+1. New state machine: IDLE → APPROACHING → IN_COMBAT
+2. Track own target via GUID (not just GetVictim)
+3. 30 second approach timeout
+4. Scan ALL mobs and pick random (not just nearest)
+5. Validate path BEFORE committing to target
+6. Added timeout check in `UpdateInCombatAI()` for stuck detection
+
+**Files Modified**:
+- `GrindingStrategy.h/cpp` - Complete rewrite with state machine
+- `RandomBotAI.cpp` - Added timeout check in UpdateInCombatAI()
+
+**Also Fixed**: GhostWalkingStrategy - ghosts now use direct MovePoint (no pathfinding needed, they walk through walls)
 
 ---
 
@@ -395,4 +429,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-29 (Bug #13 fixed - ranged bot freeze, .bot status command added)*
+*Last Updated: 2026-01-30 (Bug #15 fixed - bots stuck forever on unreachable targets, GrindingStrategy refactored)*

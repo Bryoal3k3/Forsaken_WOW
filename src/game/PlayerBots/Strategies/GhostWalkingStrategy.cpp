@@ -77,6 +77,9 @@ void GhostWalkingStrategy::OnDeath(Player* pBot)
     // DEAD (3) = already released spirit, is a ghost
     DeathState deathState = pBot->GetDeathState();
 
+    sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[GhostWalking] %s OnDeath - deathState=%u",
+        pBot->GetName(), static_cast<uint32>(deathState));
+
     if (deathState == JUST_DIED)
     {
         // Wait for next tick - state will transition to CORPSE
@@ -87,11 +90,15 @@ void GhostWalkingStrategy::OnDeath(Player* pBot)
     {
         pBot->BuildPlayerRepop();
         pBot->RepopAtGraveyard();
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[GhostWalking] %s released spirit, now at graveyard",
+            pBot->GetName());
     }
     else if (deathState == DEAD)
     {
         // Already a ghost - just go to graveyard if not there
         pBot->RepopAtGraveyard();
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[GhostWalking] %s already ghost, sent to graveyard",
+            pBot->GetName());
     }
 }
 
@@ -116,8 +123,11 @@ bool GhostWalkingStrategy::Update(Player* pBot, uint32 /*diff*/)
     if (!corpse)
     {
         // No corpse found - just resurrect in place
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[GhostWalking] %s has no corpse, resurrecting in place",
+            pBot->GetName());
         pBot->ResurrectPlayer(0.5f);
         m_initialized = false;
+        m_isWalkingToCorpse = false;
         return false;
     }
 
@@ -127,9 +137,13 @@ bool GhostWalkingStrategy::Update(Player* pBot, uint32 /*diff*/)
     if (distToCorpse <= CORPSE_RESURRECT_RANGE)
     {
         // Close enough - resurrect!
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[GhostWalking] %s reached corpse, resurrecting",
+            pBot->GetName());
+
         pBot->ResurrectPlayer(0.5f);
         pBot->SpawnCorpseBones();
         m_initialized = false;
+        m_isWalkingToCorpse = false;
 
         // Reset travel state so bot can evaluate if current location has mobs
         if (RandomBotAI* pAI = dynamic_cast<RandomBotAI*>(pBot->AI()))
@@ -140,18 +154,20 @@ bool GhostWalkingStrategy::Update(Player* pBot, uint32 /*diff*/)
         return false;
     }
 
-    // Not close enough - move toward corpse (with pathfinding for collision avoidance)
-    uint8 currentMoveType = m_pMovementMgr
-        ? m_pMovementMgr->GetCurrentMovementType()
-        : pBot->GetMotionMaster()->GetCurrentMovementGeneratorType();
+    // Not close enough - move toward corpse
+    // NOTE: Ghosts can walk through walls, so we DON'T use BotMovementManager
+    // (it has path validation that may fail for ghost paths)
+    // Just use direct MovePoint without pathfinding
+    uint8 currentMoveType = pBot->GetMotionMaster()->GetCurrentMovementGeneratorType();
 
     if (!m_isWalkingToCorpse || currentMoveType != POINT_MOTION_TYPE)
     {
-        if (m_pMovementMgr)
-            m_pMovementMgr->MoveTo(corpse->GetPositionX(), corpse->GetPositionY(), corpse->GetPositionZ(), MovementPriority::PRIORITY_NORMAL);
-        else
-            pBot->GetMotionMaster()->MovePoint(0, corpse->GetPositionX(), corpse->GetPositionY(), corpse->GetPositionZ(), MOVE_PATHFINDING | MOVE_RUN_MODE);
+        // Direct movement for ghosts - no pathfinding needed (can walk through walls)
+        pBot->GetMotionMaster()->MovePoint(0, corpse->GetPositionX(), corpse->GetPositionY(), corpse->GetPositionZ(), MOVE_RUN_MODE);
         m_isWalkingToCorpse = true;
+
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[GhostWalking] %s moving to corpse at (%.1f, %.1f, %.1f), dist: %.1f",
+            pBot->GetName(), corpse->GetPositionX(), corpse->GetPositionY(), corpse->GetPositionZ(), distToCorpse);
     }
 
     return true;  // Still working on it

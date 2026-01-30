@@ -1,7 +1,12 @@
 /*
  * GrindingStrategy.h
  *
- * Grinding behavior: find mob -> attack -> kill -> loot -> rest -> repeat
+ * Grinding behavior: scan mobs -> pick random -> approach -> kill -> repeat
+ *
+ * State Machine:
+ *   IDLE -> Scan & pick target -> APPROACHING -> IN_COMBAT -> IDLE
+ *                                      |
+ *                               TIMEOUT (15s) -> Clear target -> IDLE
  *
  * Part of the vMangos RandomBot AI Project.
  */
@@ -11,6 +16,9 @@
 
 #include "IBotStrategy.h"
 #include "SharedDefines.h"  // For CLASS_* constants
+#include "ObjectGuid.h"
+
+#include <vector>
 
 class BotCombatMgr;
 class BotMovementManager;
@@ -18,7 +26,6 @@ class Creature;
 class Player;
 
 // Helper: Returns true for classes that engage at range and need Line of Sight
-// These classes stop at distance to cast/shoot - if LoS is blocked, they get stuck
 inline bool IsRangedClass(uint8 classId)
 {
     switch (classId)
@@ -36,9 +43,17 @@ inline bool IsRangedClass(uint8 classId)
 // Result of grinding update - explicit signaling for travel decisions
 enum class GrindingResult
 {
-    ENGAGED,        // Found target, attacking
+    ENGAGED,        // Have a target, approaching or fighting
     NO_TARGETS,     // Searched area, no valid mobs found
     BUSY            // Doing something else (in combat, looting, etc.)
+};
+
+// Internal state for grinding state machine
+enum class GrindState
+{
+    IDLE,           // No target, ready to search
+    APPROACHING,    // Moving toward target
+    IN_COMBAT       // Fighting target
 };
 
 class GrindingStrategy : public IBotStrategy
@@ -65,31 +80,64 @@ public:
     uint32 GetNoMobsCount() const { return m_noMobsCount; }
     void ResetNoMobsCount() { m_noMobsCount = 0; }
 
-    // Target validation (public for use by NearestGrindTarget checker)
+    // Get current state (for debugging)
+    GrindState GetState() const { return m_state; }
+    ObjectGuid GetCurrentTarget() const { return m_currentTarget; }
+
+    // Validate a single creature as a grind target (basic checks, no path)
+    // Public because AllGrindTargets checker needs access
     bool IsValidGrindTarget(Player* pBot, Creature* pCreature) const;
 
 private:
-    // Target finding
-    Creature* FindGrindTarget(Player* pBot, float range = 50.0f);
+    // === Target Finding ===
 
-    // Combat manager (set by RandomBotAI, avoids dynamic_cast in hot path)
+    // Scan all valid mobs in range (not just nearest)
+    std::vector<Creature*> ScanForTargets(Player* pBot, float range);
+
+    // Validate that we can path to the target
+    bool HasValidPathTo(Player* pBot, Creature* pCreature) const;
+
+    // Pick a random target from candidates (validates path for each)
+    Creature* SelectRandomTarget(Player* pBot, std::vector<Creature*>& candidates);
+
+    // === State Handlers ===
+
+    GrindingResult HandleIdle(Player* pBot);
+    GrindingResult HandleApproaching(Player* pBot);
+    GrindingResult HandleInCombat(Player* pBot);
+
+    // Clear current target and reset to IDLE
+    void ClearTarget(Player* pBot);
+
+    // Get creature from our stored GUID
+    Creature* GetCurrentTargetCreature(Player* pBot) const;
+
+    // === Members ===
+
+    // Combat manager (set by RandomBotAI)
     BotCombatMgr* m_pCombatMgr = nullptr;
 
-    // Movement manager (set by RandomBotAI, centralized movement coordination)
+    // Movement manager (set by RandomBotAI)
     BotMovementManager* m_pMovementMgr = nullptr;
+
+    // State machine
+    GrindState m_state = GrindState::IDLE;
+    ObjectGuid m_currentTarget;         // Our tracked target (NOT GetVictim)
+    uint32 m_approachStartTime = 0;     // When we started approaching (ms)
 
     // Consecutive "no mobs" counter for travel system
     uint32 m_noMobsCount = 0;
 
     // Adaptive search - backoff when no mobs found
-    uint32 m_skipTicks = 0;      // Ticks to skip before next search
-    uint32 m_backoffLevel = 0;   // Current backoff level (0-3)
+    uint32 m_skipTicks = 0;
+    uint32 m_backoffLevel = 0;
 
-    // Configuration
-    static constexpr float SEARCH_RANGE_CLOSE = 50.0f;   // First tier - quick local search
-    static constexpr float SEARCH_RANGE_FAR = 150.0f;    // Second tier - full range
-    static constexpr int32 LEVEL_RANGE = 2;              // Bot level +/- this value
-    static constexpr uint32 BACKOFF_MAX_LEVEL = 3;       // Max backoff: 8 ticks (8 seconds)
+    // === Configuration ===
+
+    static constexpr float SEARCH_RANGE = 75.0f;            // Scan radius for mobs
+    static constexpr int32 LEVEL_RANGE = 2;                 // Bot level +/- this value
+    static constexpr uint32 APPROACH_TIMEOUT_MS = 30000;    // 30 seconds to reach target
+    static constexpr uint32 BACKOFF_MAX_LEVEL = 3;          // Max backoff: 8 ticks
 };
 
 #endif // MANGOS_GRINDINGSTRATEGY_H

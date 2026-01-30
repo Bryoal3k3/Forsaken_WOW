@@ -252,17 +252,27 @@ UpdateCombat(victim) [called every tick while in combat]
 
 **Purpose:** Find appropriate mobs and engage them.
 
+**State Machine:**
+```
+IDLE → Scan mobs → Pick random → Validate path → APPROACHING → IN_COMBAT → IDLE
+                                                       |
+                                                TIMEOUT (30s) → Clear target → IDLE
+```
+
 **Target Selection Criteria:**
-- Level within bot level ± 2
+- Same level as bot or up to 2 levels lower (no higher level mobs)
 - Not elite, not critter, not totem
 - Not tapped by others
+- Not already in combat with someone else
 - Visible to bot
 - Hostile or neutral (attackable)
-- Reachable via pathfinding
+- **Valid path exists** (rejects `endPoly=0` targets)
 
-**Search Tiers:**
-1. **Close range (50 yards)** - Fast local search
-2. **Far range (150 yards)** - Only if tier 1 empty
+**Search Behavior:**
+- Scans ALL valid mobs within 75 yards
+- Picks target RANDOMLY (not nearest - more natural spread)
+- Validates pathfinding BEFORE committing to target
+- 30 second approach timeout - gives up if can't reach
 
 **Exponential Backoff:**
 When no mobs found, search frequency reduces:
@@ -275,7 +285,7 @@ Resets immediately when a mob is found.
 **Result Signaling:**
 ```cpp
 enum class GrindingResult {
-    ENGAGED,     // Found target, attacking
+    ENGAGED,     // Have target, approaching or fighting
     NO_TARGETS,  // No valid mobs found
     BUSY         // In combat, looting, etc.
 };
@@ -591,9 +601,9 @@ Zone boundaries for grind spot validation.
 - `INVALID_POS_THRESHOLD`: 15 ticks before recovery teleport
 
 ### GrindingStrategy
-- `SEARCH_RANGE_CLOSE`: 50 yards (tier 1)
-- `SEARCH_RANGE_FAR`: 150 yards (tier 2)
-- `LEVEL_RANGE`: ±2 levels from bot
+- `SEARCH_RANGE`: 75 yards (scan radius)
+- `LEVEL_RANGE`: 2 (same level or up to 2 below, no higher)
+- `APPROACH_TIMEOUT_MS`: 30 seconds (give up if can't reach)
 - `BACKOFF_MAX_LEVEL`: 3 (max 8 second delay)
 
 ### TravelingStrategy
@@ -618,4 +628,4 @@ Zone boundaries for grind spot validation.
 
 ---
 
-*Last Updated: 2026-01-30 (Added BotMovementManager)*
+*Last Updated: 2026-01-30 (GrindingStrategy refactor - state machine, random target selection)*

@@ -36,8 +36,65 @@ All Phase 5 bugs have been fixed:
 - ✅ Bug #5: BuildPointPath log spam fixed (2026-01-26)
 - ✅ Bug #11: Bots now properly loot and buff (2026-01-26)
 - ✅ Bug #13: Ranged bots no longer freeze/stuck (2026-01-29)
+- ✅ Bug #15: Bots stuck on unreachable targets forever (2026-01-30)
 - 🟡 Low priority: Combat reactivity - bot ignores attackers while moving (Bug #8)
 - 🟡 Low priority: Hunter Auto Shot cooldown spam (Bug #12)
+
+---
+
+## 2026-01-30 - GrindingStrategy Refactor + GhostWalking Fix
+
+### Problem
+Bots would get stuck forever on unreachable targets:
+1. Bot selected target on terrain with no navmesh (mountain, steep slope)
+2. `GetVictim()` was set, so bot went to combat path in RandomBotAI
+3. GrindingStrategy's timeout check was in out-of-combat path - never ran!
+4. Bot kept trying to MoveChase, failing, triggering micro-recovery (shimmy)
+5. Infinite loop - bot drifted further and further from target
+
+### Solution: Complete GrindingStrategy Rewrite
+
+**New State Machine:**
+```
+IDLE → Scan & pick random target → APPROACHING → IN_COMBAT → IDLE
+                                        |
+                                 TIMEOUT (30s) → Clear target → IDLE
+```
+
+**Key Changes:**
+| Old Behavior | New Behavior |
+|--------------|--------------|
+| Grab nearest mob | Scan ALL mobs, pick random |
+| Trust `GetVictim()` blindly | Track own target via GUID + state |
+| No approach timeout | 30 second timeout to reach target |
+| Path check during scan only | Path MUST be valid before committing |
+
+**New Constants:**
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `SEARCH_RANGE` | 75 yards | Scan radius for mobs |
+| `APPROACH_TIMEOUT_MS` | 30 seconds | Give up if can't reach target |
+| `LEVEL_RANGE` | 2 | Attack same level or up to 2 below (no higher) |
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `GrindingStrategy.h` | New state machine (`GrindState` enum), timeout tracking |
+| `GrindingStrategy.cpp` | Complete rewrite - scan all, pick random, timeout check |
+| `RandomBotAI.cpp` | Added timeout check in `UpdateInCombatAI()` for stuck detection |
+| `GhostWalkingStrategy.cpp` | Fixed ghost corpse walk - use direct MovePoint (ghosts walk through walls) |
+
+### GhostWalkingStrategy Fix
+Ghosts were standing at graveyard instead of walking to corpse. Root cause: `BotMovementManager::MoveTo()` has path validation that failed for ghost paths.
+
+**Fix:** Ghosts now use direct `MovePoint()` without pathfinding - they can walk through walls anyway.
+
+### Result
+- Bots spread out more naturally (random target selection)
+- No more infinite stuck loops on mountains
+- 30 second timeout ensures bots always recover
+- Ghost corpse walking works again
 
 ---
 
@@ -1030,4 +1087,4 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 ---
 
 *Last Updated: 2026-01-30*
-*Current State: Phase 6 complete. BotMovementManager implemented. All movement centralized through single manager.*
+*Current State: Phase 6 complete. GrindingStrategy refactored with state machine, random target selection, 30s approach timeout. GhostWalking fixed.*

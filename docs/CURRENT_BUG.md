@@ -1,6 +1,6 @@
 # Current Bug Tracker
 
-## Status: 1 ACTIVE BUG (Low Priority)
+## Status: 2 ACTIVE BUGS (Low Priority)
 
 ---
 
@@ -55,6 +55,37 @@
 - `RandomBotAI.cpp:UpdateInCombatAI()` - Combat update loop
 - `Player::GetVictim()` - Current attack target
 - `Unit::GetAttackers()` - List of units attacking this unit
+
+---
+
+## Bug #12: Hunter Auto Shot Cooldown Spam
+
+**Status**: ACTIVE (Low Priority)
+
+**Symptom**: Console spam when hunters are in combat:
+```
+ERROR: Player::AddCooldown> Spell(75) try to add and already existing cooldown?
+```
+
+**Key Details**:
+- Spell 75 = Auto Shot
+- Error fires repeatedly during hunter combat
+- Bot is trying to cast Auto Shot when it's already active/on cooldown
+- Previous "fix" (checking `CURRENT_AUTOREPEAT_SPELL`) did not resolve the issue
+
+**Impact**:
+- Console log spam (cosmetic)
+- Possible minor performance impact from repeated failed casts
+
+**Related Code**:
+- `HunterCombat.cpp` - Hunter combat handler
+- `Player::AddCooldown()` - Cooldown management
+- `CURRENT_AUTOREPEAT_SPELL` - Auto-repeat spell slot
+
+**Investigation Needed**:
+- Check how Auto Shot is being triggered in `HunterCombat::UpdateCombat()`
+- Verify the `CURRENT_AUTOREPEAT_SPELL` check is working correctly
+- Consider checking `HasSpellCooldown()` before attempting cast
 
 ---
 
@@ -290,7 +321,7 @@ if ((type & PATHFIND_NOPATH) || (type & PATHFIND_NOT_USING_PATH))
 8. **Fixed Bug #2 (steep slope pathfinding)** - Added ExcludeSteepSlopes() for bots in ChaseMovementGenerator
 9. **Fixed Bug #5 (BuildPointPath spam)** - Split pointCount < 2 check from dtStatusFailed check
 10. **Fixed Bug #10 (casters not moving into range)** - Added out-of-range handling to HandleRangedMovement
-11. **Fixed Hunter Auto Shot spam** - Check CURRENT_AUTOREPEAT_SPELL before casting
+11. **Attempted Hunter Auto Shot fix** - Check CURRENT_AUTOREPEAT_SPELL before casting (did not resolve)
 
 ### Bugs Fixed This Session
 - Bug #1: Bot falling through floor ✅
@@ -301,10 +332,10 @@ if ((type & PATHFIND_NOPATH) || (type & PATHFIND_NOT_USING_PATH))
 - Bug #7: Casters targeting mobs without LoS ✅ (superseded by #9)
 - Bug #9: Bots not entering caves/buildings ✅
 - Bug #10: Casters not moving into range ✅
-- Hunter Auto Shot spam ✅
 
 ### Remaining
 - Bug #8: Combat reactivity - bot ignores attackers (Low Priority)
+- Bug #12: Hunter Auto Shot cooldown spam (Low Priority)
 
 ---
 
@@ -318,4 +349,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-26 (Bug #10 fixed - casters now move into casting range)*
+*Last Updated: 2026-01-28 (Bug #12 added - Hunter Auto Shot cooldown spam still active)*

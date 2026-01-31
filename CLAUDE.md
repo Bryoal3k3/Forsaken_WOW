@@ -20,11 +20,11 @@
 
 | Doc | Purpose |
 |-----|---------|
-| `docs/PROGRESS.md` | Session log, what changed, architecture details |
-| `docs/CURRENT_BUG.md` | Bug tracking and fix history |
-| `docs/BOT_DECISION_FLOW.md` | State machine, constants, thresholds |
-| `docs/RANDOMBOT_SYSTEM.md` | Comprehensive system documentation |
-| `docs/VMANGOS_BOT_FRAMEWORK_ANALYSIS.md` | vMangos bot framework reference |
+| `docs/PROGRESS.md` | Recent session log (last 3-5 sessions) |
+| `docs/CURRENT_BUG.md` | Active bugs + future enhancements |
+| `docs/SYSTEM_REFERENCE.md` | Architecture, constants, thresholds, debugging |
+
+**Archive:** `docs/archive/` contains historical material (old sessions, fixed bugs, audits).
 
 **After EACH session:** Update `docs/PROGRESS.md` with what was completed.
 

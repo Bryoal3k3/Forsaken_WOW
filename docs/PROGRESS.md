@@ -42,6 +42,53 @@ All Phase 5 bugs have been fixed:
 
 ---
 
+## 2026-01-31 - CRITICAL BUG FIX: Server Crash (Use-After-Free)
+
+### Problem
+Server was crashing randomly with ASAN heap-buffer-overflow errors in `BotMovementManager` methods. Crashes occurred during normal bot operation (grinding, combat, movement).
+
+### Root Cause Analysis
+The bot AI (owned by `PlayerBotEntry`) persists across logout/login cycles, but the Player object is destroyed and recreated. When a bot reconnects:
+1. `SetPlayer(newPlayer)` updates `me` in the AI
+2. But `BotMovementManager::m_bot` still pointed to the OLD (freed) Player
+3. Any access to `m_bot` triggered use-after-free → crash
+
+This was discovered using Address Sanitizer (ASAN) which was added in a previous commit.
+
+### Solution (3 Parts)
+
+| Part | Change |
+|------|--------|
+| 1. `SetBot()` method | New method to update `m_bot` and `m_botGuid` when player changes |
+| 2. `OnPlayerLogin()` | Now calls `SetBot(me)` to sync pointers on reconnect |
+| 3. `IsValid()` guards | Added to all movement entry points as threading safety net |
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `BotMovementManager.h` | Added `SetBot()`, `GetBot()` declarations |
+| `BotMovementManager.cpp` | `SetBot()` implementation, `IsValid()` guards on 6 methods |
+| `RandomBotAI.cpp` | `OnPlayerLogin()` calls `m_movementMgr->SetBot(me)` |
+
+### IsValid() Implementation
+```cpp
+bool BotMovementManager::IsValid() const
+{
+    if (!m_bot || m_botGuid.IsEmpty())
+        return false;
+    Player* pPlayer = ObjectAccessor::FindPlayer(m_botGuid);
+    return pPlayer && pPlayer == m_bot && pPlayer->IsInWorld();
+}
+```
+
+### Result
+- Server stable for 3+ hours with ASAN enabled
+- No crashes during normal bot operation
+- Fix addresses both logout/login pointer staleness AND threading race conditions
+
+---
+
 ## 2026-01-30 - GrindingStrategy Refactor + GhostWalking Fix
 
 ### Problem
@@ -1086,5 +1133,5 @@ SELECT guid, account, name FROM characters.characters WHERE account >= 10000;
 
 ---
 
-*Last Updated: 2026-01-30*
-*Current State: Phase 6 complete. GrindingStrategy refactored with state machine, random target selection, 30s approach timeout. GhostWalking fixed.*
+*Last Updated: 2026-01-31*
+*Current State: Phase 6 complete. Use-after-free crash fixed (BotMovementManager pointer sync on reconnect).*

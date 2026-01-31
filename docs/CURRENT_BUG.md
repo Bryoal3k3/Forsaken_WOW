@@ -1,6 +1,40 @@
 # Current Bug Tracker
 
-## Status: 2 ACTIVE BUGS, Bug #15 FIXED (2026-01-30)
+## Status: 2 Low-Priority Bugs Remaining (Bug #8, #12)
+
+---
+
+## Bug #16: Server Crash (Use-After-Free in BotMovementManager) - FIXED
+
+**Status**: ✅ FIXED (2026-01-31)
+
+**Symptom**: Random server crashes with ASAN heap-buffer-overflow errors:
+```
+AddressSanitizer: heap-buffer-overflow in BotMovementManager::IsMoving()
+AddressSanitizer: heap-buffer-overflow in BotMovementManager::Chase()
+```
+
+**Root Cause**:
+The bot AI persists across logout/login cycles (owned by `PlayerBotEntry`), but the Player object is destroyed on logout and recreated on login. The `BotMovementManager::m_bot` pointer was set once during initialization and never updated when the Player changed.
+
+**Lifecycle Bug**:
+1. Bot logs in first time → `BotMovementManager` created with `m_bot = Player A`
+2. Bot logs out → Player A **destroyed**, but AI survives (owned by PlayerBotEntry)
+3. Bot logs back in → NEW Player B created, `SetPlayer(B)` updates `me`
+4. But `m_initialized = true`, so BotMovementManager is NOT recreated
+5. `m_bot` still points to **freed** Player A → **CRASH**
+
+**Fix (3 Parts)**:
+1. **Added `SetBot()` method** to BotMovementManager - updates `m_bot` and `m_botGuid`
+2. **Updated `OnPlayerLogin()`** in RandomBotAI - calls `SetBot(me)` to sync pointers
+3. **Added `IsValid()` guards** to all movement entry points as safety net for threading races
+
+**Files Modified**:
+- `BotMovementManager.h` - Added `SetBot()`, `GetBot()` methods
+- `BotMovementManager.cpp` - `SetBot()` impl, `IsValid()` guards on MoveTo/MoveNear/Chase/ChaseAtAngle/MoveAway
+- `RandomBotAI.cpp` - `OnPlayerLogin()` now calls `m_movementMgr->SetBot(me)`
+
+**Tested**: Server stable for 3+ hours with ASAN enabled, no crashes.
 
 ---
 
@@ -111,36 +145,6 @@
 - Fixed Hunter Auto Shot check - removed IsMoving() blocker
 - Fixed Priest heal-lock - removed early return after heal attempt
 - Added `.bot status` debug command for diagnosing stuck bots
-
----
-
-## Bug #14: Vendoring Not Working / Status Not Showing
-
-**Status**: INVESTIGATING
-
-**Symptom**:
-1. `.bot status` shows "Grinding" and "ACTION: Grinding" when bot is walking to vendor
-2. Bot runs toward vendor but times out before reaching it
-3. Bot turns around with full bags (vendoring never completes)
-
-**Key Details**:
-- `GetStatusInfo()` in RandomBotAI.cpp has no case for vendoring state
-- Falls through to "Grinding" because `m_strategy` (GrindingStrategy) exists
-- The vendoring timeout (STUCK_TIMEOUT = 30 seconds) may be too short
-- Or path to vendor is failing/incomplete
-
-**Two Issues**:
-1. **Status display bug**: Missing vendoring check in `GetStatusInfo()`
-2. **Vendoring timeout/pathing issue**: Bot gives up before reaching vendor
-
-**Files to Check**:
-- `RandomBotAI.cpp:GetStatusInfo()` - Missing vendoring state check
-- `VendoringStrategy.cpp` - STUCK_TIMEOUT constant, stuck detection logic
-- Check if `FindNearestVendor()` is finding vendors too far away
-
-**Fix Plan**:
-1. Add vendoring check to `GetStatusInfo()` before the traveling check
-2. Investigate why bot times out - increase timeout or debug path
 
 ---
 
@@ -429,4 +433,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-30 (Bug #15 fixed - bots stuck forever on unreachable targets, GrindingStrategy refactored)*
+*Last Updated: 2026-01-31 (Added Bug #16 use-after-free fix)*

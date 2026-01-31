@@ -87,6 +87,11 @@ BotStatusInfo RandomBotAI::GetStatusInfo() const
         info.activeStrategy = "TravelingStrategy";
         info.travelState = "WALKING";
     }
+    else if (m_vendoringStrategy && m_vendoringStrategy->IsActive())
+    {
+        info.currentAction = BotAction::VENDORING;
+        info.activeStrategy = "VendoringStrategy";
+    }
     else if (m_strategy)
     {
         info.currentAction = BotAction::GRINDING;

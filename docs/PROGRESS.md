@@ -21,6 +21,45 @@
 
 ---
 
+## 2026-01-31 - BUG FIX: Vendoring Not Selling Items
+
+### Problem
+Bots would walk to a vendor when bags were full, but then do nothing - no items sold, no repairs made. The `.bot status` command always showed "GRINDING" even while walking to vendor.
+
+### Root Cause (Two Issues)
+
+**Issue 1: Status display broken**
+`GetStatusInfo()` had no check for vendoring state - it always fell through to show "GRINDING".
+
+**Issue 2: Vendor creature lookup failing**
+`GetVendorCreature()` used a GUID-based lookup (`map->GetCreature(ObjectGuid(...))`) with a cached spawn GUID from server startup. This lookup was silently failing, so `DoVendorBusiness()` returned false but the state machine continued to DONE anyway.
+
+### Solution
+
+| Fix | Description |
+|-----|-------------|
+| Added `IsActive()` to VendoringStrategy | Returns true when vendoring is in progress |
+| Added vendoring check to `GetStatusInfo()` | Now shows "VendoringStrategy" when active |
+| Replaced GUID lookup with nearby search | `FindNearbyVendorCreature()` searches for ANY friendly vendor within 30 yards |
+| Added MINIMAL-level logging | All vendoring states now log visibly to console |
+
+### Files Modified
+- `RandomBotAI.cpp` - Added vendoring check to `GetStatusInfo()`
+- `VendoringStrategy.h` - Added `IsActive()` method
+- `VendoringStrategy.cpp` - Use `FindNearbyVendorCreature()`, added visible logging
+
+### Result
+Bots now successfully sell items to vendors. Console shows full vendoring flow:
+```
+[VendoringStrategy] Bot Tallbi needs to vendor (bags full: yes, free slots: 0)
+[VendoringStrategy] Bot Tallbi walking to vendor at (-6104.5, 384.0, 395.6)
+[VendoringStrategy] Bot Tallbi arrived at vendor location
+[VendoringStrategy] Bot Tallbi selling to Grundel Harkin
+[VendoringStrategy] Bot Tallbi sold 15 items for 496 copper
+```
+
+---
+
 ## 2026-01-31 - CRITICAL BUG FIX: Server Crash (Use-After-Free)
 
 ### Problem
@@ -145,7 +184,6 @@ GM command to diagnose stuck bots - shows bot state, target, movement, strategy.
 **Known Limitations:**
 - Same-map travel only (no boats/zeppelins/flight paths)
 - May path through dangerous areas
-- Vendoring walks to vendor but transaction broken
 
 ---
 
@@ -162,4 +200,4 @@ cd ~/Desktop/Forsaken_WOW/run/bin && ./mangosd  # Terminal 2
 
 ---
 
-*Last Updated: 2026-01-31*
+*Last Updated: 2026-01-31 (Vendoring fix)*

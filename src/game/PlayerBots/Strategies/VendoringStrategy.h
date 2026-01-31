@@ -43,6 +43,7 @@ public:
 
     // Additional helpers
     bool IsComplete(Player* pBot) const;
+    bool IsActive() const { return m_state != VendorState::IDLE && m_state != VendorState::DONE; }
     void Reset();
 
     // Force start vendoring (called by TravelingStrategy for pre-travel vendor)
@@ -111,6 +112,9 @@ private:
 
     // Get the vendor creature when we arrive
     Creature* GetVendorCreature(Player* pBot) const;
+
+    // Search for any vendor creature near the bot (fallback when cached GUID fails)
+    Creature* FindNearbyVendorCreature(Player* pBot) const;
 
     // Constants
     static constexpr float VENDOR_INTERACT_RANGE = 5.0f;    // Distance to interact with vendor

@@ -5,6 +5,33 @@ For active bugs, see `docs/CURRENT_BUG.md`.
 
 ---
 
+## Bug #17: Vendoring Not Selling Items - FIXED
+
+**Status**: FIXED (2026-01-31)
+
+**Symptom**: Bots would walk to a vendor when bags were full, arrive at the vendor, then do nothing. No items sold, no repairs made. The `.bot status` command always showed "GRINDING" even while walking to vendor.
+
+**Root Cause (Two Issues)**:
+
+1. **Status display broken**: `GetStatusInfo()` had no check for vendoring state - it always fell through to show "GRINDING" regardless of what the bot was actually doing.
+
+2. **Vendor creature lookup failing**: `GetVendorCreature()` used a GUID-based lookup with a cached spawn GUID from server startup. The lookup `map->GetCreature(ObjectGuid(HIGHGUID_UNIT, entry, guid))` was silently failing. When `DoVendorBusiness()` returned false, the state machine continued to DONE anyway without selling anything.
+
+**Fix**:
+1. Added `IsActive()` method to VendoringStrategy
+2. Added vendoring check to `GetStatusInfo()` - now shows "VendoringStrategy" when active
+3. Replaced GUID lookup with `FindNearbyVendorCreature()` - searches for ANY friendly vendor within 30 yards using cell visitor pattern
+4. Added MINIMAL-level logging so vendoring flow is visible in console
+
+**Files Modified**:
+- `RandomBotAI.cpp` - Added vendoring check to `GetStatusInfo()`
+- `VendoringStrategy.h` - Added `IsActive()` method
+- `VendoringStrategy.cpp` - Use `FindNearbyVendorCreature()` in AT_VENDOR state, added visible logging
+
+**Result**: Bots now successfully sell items to vendors.
+
+---
+
 ## Bug #16: Server Crash (Use-After-Free in BotMovementManager) - FIXED
 
 **Status**: FIXED (2026-01-31)

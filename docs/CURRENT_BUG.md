@@ -53,11 +53,6 @@ ERROR: Player::AddCooldown> Spell(75) try to add and already existing cooldown?
 - **Issue**: Class-first selection leads to uneven race distribution
 - **Solution**: Add config options for race/class probability weights
 
-### Fix Vendor Transactions
-- **Status**: Needed
-- **Issue**: Bots walk to vendor but don't actually sell items or repair
-- **Solution**: Debug VendoringStrategy transaction code
-
 ---
 
 ## How to Use This File

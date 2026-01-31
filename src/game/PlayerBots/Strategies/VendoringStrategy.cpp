@@ -20,6 +20,10 @@
 #include "SharedDefines.h"
 #include "Map.h"
 #include "ProgressBar.h"
+#include "Cell.h"
+#include "CellImpl.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include <cmath>
 #include <cfloat>
 
@@ -311,12 +315,85 @@ Creature* VendoringStrategy::GetVendorCreature(Player* pBot) const
         return nullptr;
 
     // Search for the vendor near the target location
-    Creature* vendor = map->GetCreature(ObjectGuid(HIGHGUID_UNIT, m_targetVendor.creatureEntry, m_targetVendor.creatureGuid));
+    ObjectGuid vendorGuid(HIGHGUID_UNIT, m_targetVendor.creatureEntry, m_targetVendor.creatureGuid);
+    Creature* vendor = map->GetCreature(vendorGuid);
 
-    if (vendor && vendor->IsAlive() && vendor->IsVendor())
-        return vendor;
+    if (!vendor)
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[VendoringStrategy] GetVendorCreature: Creature not found for GUID %s (entry %u, dbguid %u)",
+                 vendorGuid.GetString().c_str(), m_targetVendor.creatureEntry, m_targetVendor.creatureGuid);
+        return nullptr;
+    }
 
-    return nullptr;
+    if (!vendor->IsAlive())
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[VendoringStrategy] GetVendorCreature: Vendor %s is dead",
+                 vendor->GetName());
+        return nullptr;
+    }
+
+    if (!vendor->IsVendor())
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[VendoringStrategy] GetVendorCreature: %s is not a vendor (npcflags: %u)",
+                 vendor->GetName(), vendor->GetUInt32Value(UNIT_NPC_FLAGS));
+        return nullptr;
+    }
+
+    return vendor;
+}
+
+Creature* VendoringStrategy::FindNearbyVendorCreature(Player* pBot) const
+{
+    if (!pBot)
+        return nullptr;
+
+    Map* map = pBot->GetMap();
+    if (!map)
+        return nullptr;
+
+    // Search for any friendly vendor within range
+    // Use a larger range since vendor might have patrolled away from spawn point
+    static constexpr float SEARCH_RANGE = 30.0f;
+
+    // Use vMangos cell visitor pattern to search for creatures
+    std::list<Creature*> creatures;
+    MaNGOS::AnyUnitInObjectRangeCheck check(pBot, SEARCH_RANGE);
+    MaNGOS::CreatureListSearcher<MaNGOS::AnyUnitInObjectRangeCheck> searcher(creatures, check);
+    Cell::VisitGridObjects(pBot, searcher, SEARCH_RANGE);
+
+    Creature* foundVendor = nullptr;
+    float closestDist = SEARCH_RANGE;
+
+    for (Creature* creature : creatures)
+    {
+        if (!creature || !creature->IsAlive())
+            continue;
+
+        // Must be a vendor
+        if (!creature->IsVendor())
+            continue;
+
+        // Check distance (more precise check)
+        float dist = pBot->GetDistance(creature);
+        if (dist > closestDist)
+            continue;
+
+        // Must be friendly
+        if (!IsVendorFriendly(pBot, creature->GetEntry()))
+            continue;
+
+        // Found a closer friendly vendor
+        foundVendor = creature;
+        closestDist = dist;
+    }
+
+    if (foundVendor)
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[VendoringStrategy] FindNearbyVendorCreature: Found %s at distance %.1f",
+                 foundVendor->GetName(), closestDist);
+    }
+
+    return foundVendor;
 }
 
 void VendoringStrategy::SellAllItems(Player* pBot, Creature* vendor)
@@ -380,8 +457,13 @@ void VendoringStrategy::SellAllItems(Player* pBot, Creature* vendor)
 
     if (totalSold > 0)
     {
-        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[VendoringStrategy] Bot %s sold %u items for %u copper",
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[VendoringStrategy] Bot %s sold %u items for %u copper",
                  pBot->GetName(), totalSold, totalMoney);
+    }
+    else
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[VendoringStrategy] Bot %s had no sellable items",
+                 pBot->GetName());
     }
 }
 
@@ -441,10 +523,11 @@ bool VendoringStrategy::Update(Player* pBot, uint32 diff)
             if (!NeedsToVendor(pBot))
                 return false;
 
-            sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[VendoringStrategy] Bot %s needs to vendor (bags full: %s, gear broken: %s)",
+            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[VendoringStrategy] Bot %s needs to vendor (bags full: %s, gear broken: %s, free slots: %u)",
                      pBot->GetName(),
                      AreBagsFull(pBot) ? "yes" : "no",
-                     IsGearBroken(pBot) ? "yes" : "no");
+                     IsGearBroken(pBot) ? "yes" : "no",
+                     GetFreeBagSlots(pBot));
 
             // Save starting position
             m_startX = pBot->GetPositionX();
@@ -460,11 +543,14 @@ bool VendoringStrategy::Update(Player* pBot, uint32 diff)
             if (!FindNearestVendor(pBot))
             {
                 // No vendor found, go back to idle
-                sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[VendoringStrategy] Bot %s could not find any vendor, aborting",
+                sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[VendoringStrategy] Bot %s could not find any vendor, aborting",
                          pBot->GetName());
                 Reset();
                 return false;
             }
+
+            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[VendoringStrategy] Bot %s walking to vendor at (%.1f, %.1f, %.1f)",
+                     pBot->GetName(), m_targetVendor.x, m_targetVendor.y, m_targetVendor.z);
 
             // Start walking to vendor (with pathfinding for collision avoidance)
             if (m_pMovementMgr)
@@ -475,9 +561,6 @@ bool VendoringStrategy::Update(Player* pBot, uint32 diff)
             m_lastDistanceCheckTime = 0;
             m_lastDistanceToVendor = FLT_MAX;
             m_state = VendorState::WALKING_TO_VENDOR;
-
-            sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[VendoringStrategy] Bot %s walking to vendor at (%.1f, %.1f)",
-                     pBot->GetName(), m_targetVendor.x, m_targetVendor.y);
             return true;
         }
 
@@ -491,7 +574,7 @@ bool VendoringStrategy::Update(Player* pBot, uint32 diff)
                 // Arrived at vendor
                 pBot->GetMotionMaster()->Clear();
                 m_state = VendorState::AT_VENDOR;
-                sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[VendoringStrategy] Bot %s arrived at vendor",
+                sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[VendoringStrategy] Bot %s arrived at vendor location",
                          pBot->GetName());
                 return true;
             }
@@ -530,8 +613,20 @@ bool VendoringStrategy::Update(Player* pBot, uint32 diff)
 
         case VendorState::AT_VENDOR:
         {
-            // Do business
-            DoVendorBusiness(pBot);
+            // Search for any friendly vendor nearby (more reliable than GUID lookup)
+            Creature* vendor = FindNearbyVendorCreature(pBot);
+            if (vendor)
+            {
+                sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[VendoringStrategy] Bot %s selling to %s",
+                         pBot->GetName(), vendor->GetName());
+                SellAllItems(pBot, vendor);
+                RepairAllGear(pBot, vendor);
+            }
+            else
+            {
+                sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[VendoringStrategy] Bot %s: No vendor found nearby at (%.1f, %.1f, %.1f)!",
+                         pBot->GetName(), m_targetVendor.x, m_targetVendor.y, m_targetVendor.z);
+            }
             m_state = VendorState::DONE;
             return true;
         }

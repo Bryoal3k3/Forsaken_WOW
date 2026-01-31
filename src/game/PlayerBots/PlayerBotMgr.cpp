@@ -22,6 +22,7 @@
 #include "RandomBotAI.h"
 #include "Strategies/VendoringStrategy.h"
 #include "Strategies/TravelingStrategy.h"
+#include "Strategies/TrainingStrategy.h"
 #include "DangerZoneCache.h"
 
 INSTANTIATE_SINGLETON_1(PlayerBotMgr);
@@ -157,6 +158,7 @@ void PlayerBotMgr::Load()
     {
         VendoringStrategy::BuildVendorCache();
         TravelingStrategy::BuildGrindSpotCache();
+        TrainingStrategy::BuildTrainerCache();
     }
 
     // 6- Start initial bots (AFTER caches are built - see note above)

@@ -20,6 +20,7 @@ class IBotStrategy;
 class GhostWalkingStrategy;
 class VendoringStrategy;
 class TravelingStrategy;
+class TrainingStrategy;
 class BotCombatMgr;
 class BotMovementManager;
 
@@ -33,6 +34,7 @@ enum class BotAction
     RESTING,
     TRAVELING,
     VENDORING,
+    TRAINING,
     GHOST_WALKING
 };
 
@@ -133,6 +135,10 @@ private:
 
     // Vendoring strategy
     std::unique_ptr<VendoringStrategy> m_vendoringStrategy;
+
+    // Training strategy (learning spells from class trainers)
+    std::unique_ptr<TrainingStrategy> m_trainingStrategy;
+    uint32 m_lastKnownLevel = 0;  // Track level changes for training trigger
 
     // Traveling strategy (finding and moving to grind spots)
     std::unique_ptr<TravelingStrategy> m_travelingStrategy;

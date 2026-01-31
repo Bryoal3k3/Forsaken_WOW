@@ -14,6 +14,7 @@
 #include "Strategies/GhostWalkingStrategy.h"
 #include "Strategies/VendoringStrategy.h"
 #include "Strategies/TravelingStrategy.h"
+#include "Strategies/TrainingStrategy.h"
 #include "DangerZoneCache.h"
 #include "Player.h"
 #include "Creature.h"
@@ -40,6 +41,7 @@ RandomBotAI::RandomBotAI()
     , m_strategy(std::make_unique<GrindingStrategy>())
     , m_ghostStrategy(std::make_unique<GhostWalkingStrategy>())
     , m_vendoringStrategy(std::make_unique<VendoringStrategy>())
+    , m_trainingStrategy(std::make_unique<TrainingStrategy>())
     , m_travelingStrategy(std::make_unique<TravelingStrategy>())
     , m_combatMgr(std::make_unique<BotCombatMgr>())
 {
@@ -86,6 +88,11 @@ BotStatusInfo RandomBotAI::GetStatusInfo() const
         info.currentAction = BotAction::TRAVELING;
         info.activeStrategy = "TravelingStrategy";
         info.travelState = "WALKING";
+    }
+    else if (m_trainingStrategy && m_trainingStrategy->IsActive())
+    {
+        info.currentAction = BotAction::TRAINING;
+        info.activeStrategy = "TrainingStrategy";
     }
     else if (m_vendoringStrategy && m_vendoringStrategy->IsActive())
     {
@@ -300,8 +307,13 @@ void RandomBotAI::UpdateAI(uint32 const diff)
             m_travelingStrategy->SetMovementManager(m_movementMgr.get());
         if (m_vendoringStrategy)
             m_vendoringStrategy->SetMovementManager(m_movementMgr.get());
+        if (m_trainingStrategy)
+            m_trainingStrategy->SetMovementManager(m_movementMgr.get());
         if (m_ghostStrategy)
             m_ghostStrategy->SetMovementManager(m_movementMgr.get());
+
+        // Initialize level tracking for training trigger
+        m_lastKnownLevel = me->GetLevel();
 
         // Wire up movement manager to looting behavior
         m_looting.SetMovementManager(m_movementMgr.get());
@@ -336,6 +348,19 @@ void RandomBotAI::UpdateAI(uint32 const diff)
     // Note: Uses RB_UPDATE_INTERVAL as diff since we throttle updates
     if (m_movementMgr)
         m_movementMgr->Update(RB_UPDATE_INTERVAL);
+
+    // Level-up detection: trigger training on even levels (2, 4, 6, 8, etc.)
+    if (me->GetLevel() != m_lastKnownLevel)
+    {
+        uint32 newLevel = me->GetLevel();
+        if (newLevel % 2 == 0 && m_trainingStrategy)
+        {
+            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[RandomBotAI] Bot %s reached level %u (even) - triggering training",
+                me->GetName(), newLevel);
+            m_trainingStrategy->TriggerTraining();
+        }
+        m_lastKnownLevel = newLevel;
+    }
 
     // Dead? Use ghost walking strategy
     if (!me->IsAlive())
@@ -502,6 +527,11 @@ void RandomBotAI::UpdateOutOfCombatAI()
             return;
         }
     }
+
+    // HIGHEST PRIORITY: Training - learning new spells is critical for player power
+    // This runs before everything else to ensure bots get their spells ASAP
+    if (m_trainingStrategy && m_trainingStrategy->Update(me, RB_UPDATE_INTERVAL))
+        return;  // Busy training
 
     // Check vendoring - bags full or gear broken?
     // This runs before grinding so bots don't keep trying to loot with full bags

@@ -10,6 +10,7 @@ RandomBots are autonomous AI-controlled player characters that grind mobs, level
 - Loot corpses, rest when low, sell items at vendors
 - Travel to new areas when they out-level their current zone
 - Handle death (ghost walk to corpse, resurrect)
+- Learn new spells from class trainers at even levels
 
 ### High-Level Flow
 ```
@@ -38,6 +39,9 @@ Server Start
         |    |                                |
         |    v                                |
         |  Bags full? --> Vendor strategy     |
+        |    |                                |
+        |    v                                |
+        |  New level? --> Train at trainer   |
         |    |                                |
         |    v                                |
         |  No mobs? --> Travel to new spot    |
@@ -76,6 +80,7 @@ src/game/PlayerBots/
     +-- GhostWalkingStrategy.h/cpp <- Death handling
     +-- VendoringStrategy.h/cpp <- Sell items, repair
     +-- TravelingStrategy.h/cpp <- Travel to grind spots
+    +-- TrainingStrategy.h/cpp  <- Learn spells at trainers
 ```
 
 ### Layer Responsibilities
@@ -184,10 +189,11 @@ UpdateAI(diff)
 | 2 | **Resting** | HP < 35% OR mana < 45% |
 | 3 | **Combat** | In combat OR has attack victim |
 | 4 | **Looting** | Combat just ended, lootable corpses nearby |
-| 5 | **Vendoring** | Bags 100% full OR gear 0% durability |
-| 6 | **Buffing** | Missing self-buffs |
-| 7 | **Traveling** | No valid mobs for 5 consecutive ticks |
-| 8 | **Grinding** | Default - find and kill mobs |
+| 5 | **Training** | Even level reached, new spells available |
+| 6 | **Vendoring** | Bags 100% full OR gear 0% durability |
+| 7 | **Buffing** | Missing self-buffs |
+| 8 | **Traveling** | No valid mobs for 5 consecutive ticks |
+| 9 | **Grinding** | Default - find and kill mobs |
 
 ---
 
@@ -222,6 +228,13 @@ UpdateAI(diff)
 |----------|-------|---------|
 | `DEATH_LOOP_COUNT` | 3 deaths | Triggers spirit healer |
 | `DEATH_LOOP_WINDOW` | 600 sec | Time window for death loop |
+
+### Training (TrainingStrategy.h)
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| Training trigger | Even levels | Train at 2, 4, 6, 8... |
+| `STUCK_TIMEOUT_MS` | 300000ms | Give up after 5 min stuck |
+| Trainer detection | 10 yards | Distance to start learning |
 
 ---
 

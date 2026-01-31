@@ -308,7 +308,10 @@ void RandomBotAI::UpdateAI(uint32 const diff)
         if (m_vendoringStrategy)
             m_vendoringStrategy->SetMovementManager(m_movementMgr.get());
         if (m_trainingStrategy)
+        {
             m_trainingStrategy->SetMovementManager(m_movementMgr.get());
+            m_trainingStrategy->SetAI(this);
+        }
         if (m_ghostStrategy)
             m_ghostStrategy->SetMovementManager(m_movementMgr.get());
 

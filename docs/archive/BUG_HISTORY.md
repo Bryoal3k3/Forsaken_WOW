@@ -5,6 +5,37 @@ For active bugs, see `docs/CURRENT_BUG.md`.
 
 ---
 
+## Bug #18: Training Learning Wrong Spells (Bots Teaching Mobs) - FIXED
+
+**Status**: FIXED (2026-01-31)
+
+**Symptom**: After training at class trainers, bots didn't use newly learned spells. Warlocks would spam-cast on mobs with a yellow "spell learned" visual effect appearing on the TARGET mob instead of dealing damage.
+
+**Root Cause (Two Issues)**:
+
+1. **Spell cache not refreshing**: Combat handlers use cached spell pointers (`m_spells.warlock.pImmolate`). After training, new spells exist in the player's spellbook but the cache wasn't updated.
+
+2. **Learning "Teach" spells instead of actual spells**: The `npc_trainer_template` table contains teaching spell IDs, not actual combat spells:
+   - Spell 1374 = "Teach Immolate" (has `SPELL_EFFECT_LEARN_SPELL`, triggers spell 348)
+   - Spell 348 = actual Immolate
+
+   Bots were learning spell 1374 and trying to CAST it on enemies - literally trying to teach wolves how to cast Immolate!
+
+**Fix**:
+
+1. **Refresh cache after training** - Added `SetAI()` method to TrainingStrategy. After learning spells, calls `ResetSpellData()` + `PopulateSpellData()`.
+
+2. **Resolve teach spells** - In `GetLearnableSpells()`, check if spell has `SPELL_EFFECT_LEARN_SPELL` effect. If so, use the `EffectTriggerSpell` (the actual spell) instead.
+
+**Files Modified**:
+- `TrainingStrategy.h` - Added `CombatBotBaseAI* m_pAI` and `SetAI()` method
+- `TrainingStrategy.cpp` - Added cache refresh after learning, teach spell resolution
+- `RandomBotAI.cpp` - Added `m_trainingStrategy->SetAI(this)` call
+
+**Result**: Bots now learn actual combat spells and use them immediately after training.
+
+---
+
 ## Bug #17: Vendoring Not Selling Items - FIXED
 
 **Status**: FIXED (2026-01-31)
@@ -253,4 +284,4 @@ The bot AI persists across logout/login cycles (owned by `PlayerBotEntry`), but 
 
 ---
 
-*Archived: 2026-01-31*
+*Last Updated: 2026-01-31*

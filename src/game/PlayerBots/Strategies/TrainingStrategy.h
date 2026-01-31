@@ -17,6 +17,7 @@
 class Player;
 class Creature;
 class BotMovementManager;
+class CombatBotBaseAI;
 
 // Cached trainer location data
 struct TrainerLocation
@@ -58,10 +59,16 @@ public:
     // Set movement manager (called by RandomBotAI after construction)
     void SetMovementManager(BotMovementManager* pMoveMgr) { m_pMovementMgr = pMoveMgr; }
 
+    // Set AI reference (for refreshing spell cache after training)
+    void SetAI(CombatBotBaseAI* pAI) { m_pAI = pAI; }
+
     // Pre-build trainer cache (call during server startup)
     static void BuildTrainerCache();
 
 private:
+    // AI reference (for refreshing spell cache after training)
+    CombatBotBaseAI* m_pAI = nullptr;
+
     // Movement manager (set by RandomBotAI, centralized movement coordination)
     BotMovementManager* m_pMovementMgr = nullptr;
 

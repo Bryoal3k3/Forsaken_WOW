@@ -9,6 +9,8 @@
 
 #include "TrainingStrategy.h"
 #include "BotMovementManager.h"
+#include "CombatBotBaseAI.h"
+#include "Spells/SpellDefines.h"
 #include "Player.h"
 #include "Creature.h"
 #include "ObjectMgr.h"
@@ -252,14 +254,31 @@ std::vector<uint32> TrainingStrategy::GetLearnableSpells(Player* pBot, uint32 tr
             Field* fields = result->Fetch();
             uint32 spellId = fields[0].GetUInt32();
 
-            // Check if bot already knows this spell
-            if (!pBot->HasSpell(spellId))
+            // Verify spell exists
+            SpellEntry const* spellEntry = sSpellMgr.GetSpellEntry(spellId);
+            if (!spellEntry)
+                continue;
+
+            // Check if this is a "teach spell" (trainer casts this to teach the actual spell)
+            // These have SPELL_EFFECT_LEARN_SPELL and the actual spell is in EffectTriggerSpell
+            uint32 actualSpellId = spellId;
+            for (uint32 i = 0; i < MAX_EFFECT_INDEX; ++i)
             {
-                // Verify spell exists
-                SpellEntry const* spellEntry = sSpellMgr.GetSpellEntry(spellId);
-                if (spellEntry)
+                if (spellEntry->Effect[i] == SPELL_EFFECT_LEARN_SPELL && spellEntry->EffectTriggerSpell[i] != 0)
                 {
-                    learnableSpells.push_back(spellId);
+                    actualSpellId = spellEntry->EffectTriggerSpell[i];
+                    break;
+                }
+            }
+
+            // Check if bot already knows the actual spell
+            if (!pBot->HasSpell(actualSpellId))
+            {
+                // Verify the actual spell exists
+                SpellEntry const* actualSpellEntry = sSpellMgr.GetSpellEntry(actualSpellId);
+                if (actualSpellEntry)
+                {
+                    learnableSpells.push_back(actualSpellId);
                 }
             }
         } while (result->NextRow());
@@ -473,6 +492,15 @@ bool TrainingStrategy::Update(Player* pBot, uint32 diff)
                 sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[TrainingStrategy] Bot %s learning spells from %s",
                          pBot->GetName(), trainer->GetName());
                 LearnAvailableSpells(pBot, trainer);
+
+                // Refresh spell cache so combat handlers can use newly learned spells
+                if (m_pAI)
+                {
+                    m_pAI->ResetSpellData();
+                    m_pAI->PopulateSpellData();
+                    sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[TrainingStrategy] Bot %s spell cache refreshed",
+                             pBot->GetName());
+                }
             }
             else
             {

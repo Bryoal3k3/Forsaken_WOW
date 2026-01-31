@@ -1,6 +1,6 @@
 # RandomBot AI Development Progress
 
-## Project Status: Phase 6 COMPLETE (Movement Manager)
+## Project Status: Phase 7 COMPLETE (Training System)
 
 | Phase | Status | Description |
 |-------|--------|-------------|
@@ -13,11 +13,52 @@
 | Phase 5 | Complete | Travel system - find and travel to grind spots |
 | Phase 5.5 | Complete | Auto-generated grind spots + local randomization |
 | Phase 6 | Complete | Centralized BotMovementManager |
+| Phase 7 | Complete | Automatic spell training at class trainers |
 
 ### Active Bugs
 - Bug #12: Hunter Auto Shot cooldown spam (Low Priority - cosmetic)
 
 ### For older session logs, see `docs/archive/PROGRESS_ARCHIVE.md`
+
+---
+
+## 2026-01-31 - Phase 7: TrainingStrategy (Automatic Spell Learning)
+
+### Feature
+Bots now automatically travel to class trainers and learn new spells when they reach even levels (2, 4, 6, 8, etc.).
+
+### Implementation
+
+**State Machine:**
+```
+IDLE -> Check level -> FINDING_TRAINER -> TRAVELING -> AT_TRAINER -> Learn spells -> DONE
+                              |                |
+                       No trainer found    Combat interrupt -> Resume after
+```
+
+**Key Features:**
+| Feature | Description |
+|---------|-------------|
+| Level-based triggers | Training at even levels (2, 4, 6...) |
+| Trainer cache | Built at startup from `creature_template` (trainer_type=0, trainer_class>0) |
+| Faction-aware | Finds trainers matching bot's faction |
+| Same-map only | Won't cross continents for training |
+| Highest priority | Runs before vendoring/grinding |
+| Combat handling | Resumes travel after combat interruption |
+| 5 minute timeout | Prevents infinite stuck on long distances |
+| Free spells | Testing mode - no gold cost |
+
+### Files Created
+- `Strategies/TrainingStrategy.h` - Strategy header with state machine
+- `Strategies/TrainingStrategy.cpp` - Full implementation (~534 LOC)
+
+### Files Modified
+- `RandomBotAI.h/cpp` - Added training check, `NeedsTraining()`, `HasTrainedThisLevel()`
+- `PlayerBotMgr.cpp` - Initialize trainer cache on startup
+- `CMakeLists.txt` - Added TrainingStrategy files
+
+### Result
+Bots automatically seek out trainers and learn new spells as they level up.
 
 ---
 
@@ -180,6 +221,7 @@ GM command to diagnose stuck bots - shows bot state, target, movement, strategy.
 - Travel to new grind spots when area is depleted
 - Enter caves and buildings to reach mobs
 - React to being attacked (switch targets)
+- Learn new spells from class trainers at even levels
 
 **Known Limitations:**
 - Same-map travel only (no boats/zeppelins/flight paths)
@@ -200,4 +242,4 @@ cd ~/Desktop/Forsaken_WOW/run/bin && ./mangosd  # Terminal 2
 
 ---
 
-*Last Updated: 2026-01-31 (Vendoring fix)*
+*Last Updated: 2026-01-31 (TrainingStrategy - Phase 7)*

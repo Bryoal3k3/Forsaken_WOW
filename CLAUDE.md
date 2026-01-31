@@ -32,7 +32,7 @@
 
 ## Project Goal
 
-Autonomous RandomBot AI: auto-generate bots that grind, loot, rest, vendor, travel, and level up naturally.
+Autonomous RandomBot AI: auto-generate bots that grind, loot, rest, vendor, travel, train spells, and level up naturally.
 
 ---
 
@@ -60,7 +60,8 @@ src/game/PlayerBots/
     ├── LootingBehavior.h/cpp   ← Loot corpses after combat
     ├── GhostWalkingStrategy.h/cpp ← Death handling
     ├── VendoringStrategy.h/cpp ← Sell items, repair gear
-    └── TravelingStrategy.h/cpp ← Travel to new grind spots
+    ├── TravelingStrategy.h/cpp ← Travel to new grind spots
+    └── TrainingStrategy.h/cpp  ← Learn spells at class trainers
 ```
 
 ### Key Files to Study

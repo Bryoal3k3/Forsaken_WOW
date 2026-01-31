@@ -120,6 +120,10 @@ void RandomBotAI::OnPlayerLogin()
 {
     // NOTE: Initialization is handled in UpdateAI() during the first tick
     // This ensures the player is fully loaded from DB before we modify state
+
+    // Sync m_bot with me when player reconnects (fixes use-after-free on logout/login)
+    if (m_movementMgr)
+        m_movementMgr->SetBot(me);
 }
 
 void RandomBotAI::MovementInform(uint32 movementType, uint32 data)

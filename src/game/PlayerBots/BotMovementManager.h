@@ -102,6 +102,10 @@ public:
     explicit BotMovementManager(Player* bot);
     ~BotMovementManager() = default;
 
+    // Update bot pointer (call when player reconnects to sync m_bot with me)
+    void SetBot(Player* bot);
+    Player* GetBot() const { return m_bot; }
+
     // === MAIN MOVEMENT COMMANDS ===
 
     // Move to a specific point (travel, vendor, loot, ghost)
@@ -187,8 +191,12 @@ public:
     // Force teleport to safe location (last resort)
     void EmergencyTeleport();
 
+    // Check if bot pointer is still valid (guards against use-after-free)
+    bool IsValid() const;
+
 private:
     Player* m_bot;
+    ObjectGuid m_botGuid;  // Store GUID to validate pointer against use-after-free
     MovementState m_state;
 
     // Timing

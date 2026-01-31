@@ -12,6 +12,7 @@
 #include "MotionMaster.h"
 #include "PathFinder.h"
 #include "SpellAuraDefines.h"
+#include "ObjectAccessor.h"
 #include "Log.h"
 
 #include <cmath>
@@ -24,10 +25,18 @@
 
 BotMovementManager::BotMovementManager(Player* bot)
     : m_bot(bot)
+    , m_botGuid(bot ? bot->GetObjectGuid() : ObjectGuid())
     , m_lastMoveCommandTime(0)
     , m_stuckCheckTimer(0)
 {
     m_state.Clear();
+}
+
+void BotMovementManager::SetBot(Player* bot)
+{
+    m_bot = bot;
+    m_botGuid = bot ? bot->GetObjectGuid() : ObjectGuid();
+    m_state.Clear();  // Clear stale movement state
 }
 
 // ============================================================================
@@ -36,6 +45,10 @@ BotMovementManager::BotMovementManager(Player* bot)
 
 MoveResult BotMovementManager::MoveTo(float x, float y, float z, MovementPriority priority, uint32 pointId)
 {
+    // Guard against use-after-free
+    if (!IsValid())
+        return MoveResult::FAILED_CC;
+
     // Step 1: CC Check
     if (IsCC())
         return MoveResult::FAILED_CC;
@@ -77,6 +90,9 @@ MoveResult BotMovementManager::MoveTo(float x, float y, float z, MovementPriorit
 
 MoveResult BotMovementManager::MoveNear(float x, float y, float z, float maxDist, MovementPriority priority)
 {
+    if (!IsValid())
+        return MoveResult::FAILED_CC;
+
     if (IsCC())
         return MoveResult::FAILED_CC;
 
@@ -120,6 +136,9 @@ MoveResult BotMovementManager::MoveNear(float x, float y, float z, float maxDist
 
 MoveResult BotMovementManager::MoveNear(Unit* target, float distance, MovementPriority priority)
 {
+    if (!IsValid())
+        return MoveResult::FAILED_CC;
+
     if (!target || !target->IsInWorld())
         return MoveResult::FAILED_INVALID_TARGET;
 
@@ -135,6 +154,9 @@ MoveResult BotMovementManager::MoveNear(Unit* target, float distance, MovementPr
 
 MoveResult BotMovementManager::Chase(Unit* target, float distance, MovementPriority priority)
 {
+    if (!IsValid())
+        return MoveResult::FAILED_CC;
+
     if (!target || !target->IsInWorld())
         return MoveResult::FAILED_INVALID_TARGET;
 
@@ -179,6 +201,9 @@ MoveResult BotMovementManager::Chase(Unit* target, float distance, MovementPrior
 
 MoveResult BotMovementManager::ChaseAtAngle(Unit* target, float distance, float angle, MovementPriority priority)
 {
+    if (!IsValid())
+        return MoveResult::FAILED_CC;
+
     if (!target || !target->IsInWorld())
         return MoveResult::FAILED_INVALID_TARGET;
 
@@ -202,6 +227,9 @@ MoveResult BotMovementManager::ChaseAtAngle(Unit* target, float distance, float 
 
 MoveResult BotMovementManager::MoveAway(Unit* threat, float distance, MovementPriority priority)
 {
+    if (!IsValid())
+        return MoveResult::FAILED_CC;
+
     if (!threat)
         return MoveResult::FAILED_INVALID_TARGET;
 
@@ -254,6 +282,9 @@ MoveResult BotMovementManager::MoveAway(Unit* threat, float distance, MovementPr
 
 void BotMovementManager::StopMovement(bool force)
 {
+    if (!IsValid())
+        return;
+
     if (force || m_state.priority < MovementPriority::PRIORITY_FORCED)
     {
         m_bot->StopMoving();
@@ -268,6 +299,10 @@ void BotMovementManager::StopMovement(bool force)
 
 bool BotMovementManager::Update(uint32 diff)
 {
+    // Guard against use-after-free (race condition with player logout)
+    if (!IsValid())
+        return false;
+
     if (!IsMoving())
     {
         m_state.stuckCount = 0;
@@ -330,13 +365,27 @@ bool BotMovementManager::Update(uint32 diff)
 // Validation Queries
 // ============================================================================
 
+bool BotMovementManager::IsValid() const
+{
+    // Guard against use-after-free: DON'T dereference m_bot directly!
+    // Instead, look up the player by GUID and verify it matches our pointer.
+    if (!m_bot || m_botGuid.IsEmpty())
+        return false;
+
+    Player* pPlayer = ObjectAccessor::FindPlayer(m_botGuid);
+    return pPlayer && pPlayer == m_bot && pPlayer->IsInWorld();
+}
+
 bool BotMovementManager::CanMove() const
 {
-    return !IsCC() && m_bot->IsAlive();
+    return IsValid() && !IsCC() && m_bot->IsAlive();
 }
 
 bool BotMovementManager::IsMoving() const
 {
+    if (!IsValid())
+        return false;
+
     return m_bot->IsMoving() ||
            m_bot->GetMotionMaster()->GetCurrentMovementGeneratorType() != IDLE_MOTION_TYPE;
 }
@@ -643,7 +692,7 @@ float BotMovementManager::CalculateMoveDelay(float distance) const
 
 bool BotMovementManager::IsCC() const
 {
-    if (!m_bot || !m_bot->IsAlive())
+    if (!IsValid() || !m_bot->IsAlive())
         return true;
 
     // Check for crowd control states

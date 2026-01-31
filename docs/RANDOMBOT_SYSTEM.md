@@ -162,6 +162,14 @@ PlayerBotMgr::Load()
                     └─► LoginPlayer() - Bot enters world
 ```
 
+### Player Pointer Lifecycle
+
+**Critical:** The bot AI object (`RandomBotAI`) survives logout/login cycles because it's owned by `PlayerBotEntry`. However, the `Player` object is destroyed on logout and recreated on login.
+
+This caused a use-after-free crash (Bug #16) where `BotMovementManager::m_bot` pointed to a freed Player object after reconnect.
+
+**Solution:** `OnPlayerLogin()` calls `m_movementMgr->SetBot(me)` to sync the pointer when the Player object changes. All movement entry points also have `IsValid()` guards as a safety net.
+
 ### Update Loop
 
 Each bot's `UpdateAI()` runs every 1 second (configurable via `RB_UPDATE_INTERVAL`).
@@ -628,4 +636,4 @@ Zone boundaries for grind spot validation.
 
 ---
 
-*Last Updated: 2026-01-30 (GrindingStrategy refactor - state machine, random target selection)*
+*Last Updated: 2026-01-31 (Added player pointer lifecycle section - use-after-free fix)*

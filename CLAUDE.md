@@ -100,4 +100,4 @@ If bots don't spawn: check `characters.playerbot` table. Empty table + generatio
 
 ---
 
-*Last Updated: 2026-01-30*
+*Last Updated: 2026-01-31*

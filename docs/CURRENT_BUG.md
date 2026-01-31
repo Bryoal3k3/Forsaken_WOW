@@ -1,6 +1,6 @@
 # Current Bug Tracker
 
-## Status: 2 Low-Priority Bugs Remaining (Bug #8, #12)
+## Status: 1 Low-Priority Bug Remaining (Bug #12)
 
 ---
 
@@ -97,32 +97,24 @@ The bot AI persists across logout/login cycles (owned by `PlayerBotEntry`), but 
 
 ---
 
-## Bug #8: Combat Reactivity - Bot Ignores Attackers While Moving
+## Bug #8: Combat Reactivity - Bot Ignores Attackers While Moving - FIXED
 
-**Status**: IDENTIFIED (Low Priority)
+**Status**: ✅ FIXED (2026-01-30)
 
-**Symptom**: When a bot is moving toward a selected target and gets attacked by a different mob, the bot continues walking toward its original target instead of fighting back against the attacker.
+**Symptom**: When a bot was moving toward a selected target and got attacked by a different mob, the bot continued walking toward its original target instead of fighting back.
 
-**Key Details**:
-- Bot targets Mob A, starts walking toward it
-- Mob B attacks bot from behind/side
-- Bot enters combat (`IsInCombat() = true`)
-- `GetVictim()` is still Mob A
-- Bot keeps walking toward Mob A while Mob B beats on them
+**Fix**: Added combat reactivity in `UpdateInCombatAI()`:
+- Iterates through `me->GetAttackers()`
+- If any attacker isn't the current victim, switches target immediately
+- Updates GrindingStrategy target to stay in sync
 
-**Impact**:
-- Low-level: Minor issue in starting zones with mostly yellow mobs
-- High-level: Serious issue - bot could die walking through mob packs
+**Also**: Added immediate response in `UpdateOutOfCombatAI()` when attacked.
 
-**Potential Fixes**:
-1. In `UpdateInCombatAI()`, check if bot is being attacked by something other than current target
-2. If attacker is closer or current target isn't attacking back, switch targets
-3. Consider threat/aggro list for smarter target selection
+**Commit**: `6898e3c4e feat: Add ASAN debugging, stuck detection, and combat reactivity`
 
-**Related Code**:
-- `RandomBotAI.cpp:UpdateInCombatAI()` - Combat update loop
-- `Player::GetVictim()` - Current attack target
-- `Unit::GetAttackers()` - List of units attacking this unit
+**Files Modified**:
+- `RandomBotAI.cpp` - Lines 413-434 (in-combat), Lines 462-498 (out-of-combat)
+- `GrindingStrategy.h/cpp` - Added `SetTarget()` method
 
 ---
 
@@ -433,4 +425,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-31 (Added Bug #16 use-after-free fix)*
+*Last Updated: 2026-01-31 (Bug #8 marked as fixed - was implemented in commit 6898e3c4e)*

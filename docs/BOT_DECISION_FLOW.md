@@ -4,6 +4,42 @@ This document describes how RandomBotAI coordinates strategies and makes decisio
 
 ---
 
+## Player Pointer Lifecycle (Critical)
+
+The bot AI object survives logout/login cycles, but the Player object does not. This requires careful pointer management.
+
+### The Problem
+```
+1. Bot logs in first time → BotMovementManager created with m_bot = Player A
+2. Bot logs out → Player A DESTROYED, but AI survives (owned by PlayerBotEntry)
+3. Bot logs back in → NEW Player B created, SetPlayer(B) updates 'me'
+4. But m_initialized = true, so BotMovementManager is NOT recreated
+5. m_bot still points to FREED Player A → CRASH (use-after-free)
+```
+
+### The Solution
+`BotMovementManager::SetBot()` is called in `OnPlayerLogin()` to sync pointers:
+```cpp
+void RandomBotAI::OnPlayerLogin()
+{
+    if (m_movementMgr)
+        m_movementMgr->SetBot(me);  // Sync pointer after reconnect
+}
+```
+
+Additionally, `IsValid()` guards on all movement entry points provide a safety net:
+```cpp
+bool BotMovementManager::IsValid() const
+{
+    if (!m_bot || m_botGuid.IsEmpty())
+        return false;
+    Player* pPlayer = ObjectAccessor::FindPlayer(m_botGuid);
+    return pPlayer && pPlayer == m_bot && pPlayer->IsInWorld();
+}
+```
+
+---
+
 ## BotMovementManager (Centralized Movement)
 
 All movement commands go through `BotMovementManager` instead of calling MotionMaster directly.
@@ -408,4 +444,4 @@ TravelingStrategy::StartTravel()
 
 ---
 
-*Last Updated: 2026-01-30 (GrindingStrategy refactor - state machine, 30s timeout, random target selection)*
+*Last Updated: 2026-01-31 (Added player pointer lifecycle section - use-after-free fix)*

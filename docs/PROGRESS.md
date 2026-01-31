@@ -37,7 +37,7 @@ All Phase 5 bugs have been fixed:
 - ✅ Bug #11: Bots now properly loot and buff (2026-01-26)
 - ✅ Bug #13: Ranged bots no longer freeze/stuck (2026-01-29)
 - ✅ Bug #15: Bots stuck on unreachable targets forever (2026-01-30)
-- 🟡 Low priority: Combat reactivity - bot ignores attackers while moving (Bug #8)
+- ✅ Bug #8: Combat reactivity - bots now switch to attackers (2026-01-30, commit 6898e3c4e)
 - 🟡 Low priority: Hunter Auto Shot cooldown spam (Bug #12)
 
 ---

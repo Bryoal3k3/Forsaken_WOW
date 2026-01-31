@@ -9,6 +9,7 @@
 #include "GhostWalkingStrategy.h"
 #include "BotMovementManager.h"
 #include "TravelingStrategy.h"
+#include "GrindingStrategy.h"
 #include "RandomBotAI.h"
 #include "Player.h"
 #include "Corpse.h"
@@ -62,11 +63,13 @@ void GhostWalkingStrategy::OnDeath(Player* pBot)
             // The res sickness will expire and normal grinding will resume
         }
 
-        // Reset travel state so it can evaluate fresh after resurrection
+        // Reset strategies so bot evaluates fresh after spirit healer resurrection
         if (RandomBotAI* pAI = dynamic_cast<RandomBotAI*>(pBot->AI()))
         {
             if (TravelingStrategy* pTravel = pAI->GetTravelingStrategy())
                 pTravel->ResetArrivalCooldown();
+            if (GrindingStrategy* pGrind = pAI->GetGrindingStrategy())
+                pGrind->Reset(pBot);
         }
         return;
     }

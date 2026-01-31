@@ -16,6 +16,11 @@
 #ifndef MANGOS_DANGERZONECACHE_H
 #define MANGOS_DANGERZONECACHE_H
 
+// Feature toggle: Set to 1 to enable danger zone avoidance system.
+// When disabled, Update() becomes a no-op and all lookups return false/empty.
+// Enable this after testing to allow bots to avoid high-level mob locations.
+#define ENABLE_DANGER_ZONES 0
+
 #include "Common.h"
 #include "Policies/Singleton.h"
 #include <unordered_map>

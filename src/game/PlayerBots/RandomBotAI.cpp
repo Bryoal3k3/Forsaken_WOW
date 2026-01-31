@@ -27,6 +27,7 @@
 #include "SpellAuras.h"
 #include "MotionMaster.h"
 #include "Log.h"
+#include <cmath>
 
 #define RB_UPDATE_INTERVAL 1000
 
@@ -207,6 +208,50 @@ void RandomBotAI::UpdateAI(uint32 const diff)
         }
     }
 
+    // Long-term stuck detection - if bot hasn't moved 2+ yards in 5 minutes, teleport home
+    {
+        uint32 currentTime = WorldTimer::getMSTime();
+        float dx = me->GetPositionX() - m_lastProgressX;
+        float dy = me->GetPositionY() - m_lastProgressY;
+        float distMoved = std::sqrt(dx * dx + dy * dy);
+
+        if (distMoved >= STUCK_MOVE_THRESHOLD)
+        {
+            // Made progress - update tracking position
+            m_lastProgressX = me->GetPositionX();
+            m_lastProgressY = me->GetPositionY();
+            m_lastProgressTime = currentTime;
+        }
+        else if (m_lastProgressTime > 0 && WorldTimer::getMSTimeDiff(m_lastProgressTime, currentTime) > STUCK_TIME_THRESHOLD)
+        {
+            // Stuck for 5 minutes - teleport to hearthstone
+            sLog.Out(LOG_BASIC, LOG_LVL_BASIC,
+                "[RandomBotAI] %s stuck (hasn't moved %.1f yards in 5 minutes), teleporting to hearthstone",
+                me->GetName(), STUCK_MOVE_THRESHOLD);
+
+            me->GetMotionMaster()->Clear(false, true);
+            me->GetMotionMaster()->MoveIdle();
+            me->TeleportToHomebind();
+
+            // Reset tracking
+            m_lastProgressX = 0.0f;
+            m_lastProgressY = 0.0f;
+            m_lastProgressTime = 0;
+            ResetBehaviors();
+            if (m_travelingStrategy)
+                m_travelingStrategy->ResetArrivalCooldown();
+
+            return;
+        }
+        else if (m_lastProgressTime == 0)
+        {
+            // Initialize tracking on first run
+            m_lastProgressX = me->GetPositionX();
+            m_lastProgressY = me->GetPositionY();
+            m_lastProgressTime = currentTime;
+        }
+    }
+
     // One-time initialization
     if (!m_initialized)
     {
@@ -360,6 +405,29 @@ void RandomBotAI::UpdateInCombatAI()
 
     if (!pVictim)
         return;
+
+    // Combat reactivity: If any mob is chasing us that isn't our current target,
+    // stop and fight it. Prevents bots from pulling aggro trains.
+    for (Unit* pAttacker : me->GetAttackers())
+    {
+        if (pAttacker && pAttacker != pVictim && pAttacker->IsAlive())
+        {
+            sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+                "[RandomBotAI] %s stopping to fight %s (was heading to %s)",
+                me->GetName(), pAttacker->GetName(), pVictim->GetName());
+
+            me->Attack(pAttacker, true);
+            pVictim = pAttacker;
+
+            // Update grinding strategy target if applicable
+            if (GrindingStrategy* pGrinding = GetGrindingStrategy())
+            {
+                if (Creature* pCreature = pAttacker->ToCreature())
+                    pGrinding->SetTarget(pCreature);
+            }
+            break;
+        }
+    }
 
     // Check if we're stuck trying to reach a target (not in actual combat)
     // This handles the case where GrindingStrategy set a victim but we can't reach it

@@ -80,6 +80,12 @@ public:
     uint32 GetNoMobsCount() const { return m_noMobsCount; }
     void ResetNoMobsCount() { m_noMobsCount = 0; }
 
+    // Reset state completely (used after spirit healer resurrection)
+    void Reset(Player* pBot);
+
+    // Set target externally (used when bot switches to a new attacker)
+    void SetTarget(Creature* pTarget);
+
     // Get current state (for debugging)
     GrindState GetState() const { return m_state; }
     ObjectGuid GetCurrentTarget() const { return m_currentTarget; }
@@ -137,6 +143,7 @@ private:
     static constexpr float SEARCH_RANGE = 75.0f;            // Scan radius for mobs
     static constexpr int32 LEVEL_RANGE = 2;                 // Bot level +/- this value
     static constexpr uint32 APPROACH_TIMEOUT_MS = 30000;    // 30 seconds to reach target
+    static constexpr float PATH_LENGTH_RATIO = 2.0f;        // Reject if path > 2x straight-line dist
     static constexpr uint32 BACKOFF_MAX_LEVEL = 3;          // Max backoff: 8 ticks
 };
 

@@ -161,6 +161,11 @@ void DangerZoneCache::GetNearbyDangers(uint32 mapId, float x, float y, float rad
 
 void DangerZoneCache::Update(uint32 diff)
 {
+#if !ENABLE_DANGER_ZONES
+    // Feature disabled - no-op to avoid wasted CPU cycles
+    (void)diff;
+    return;
+#else
     m_cleanupTimer += diff;
 
     if (m_cleanupTimer < DangerZoneConstants::CLEANUP_INTERVAL_MS)
@@ -204,6 +209,7 @@ void DangerZoneCache::Update(uint32 diff)
             "[DangerZoneCache] Cleanup: removed %u expired zones, %u remaining",
             removedCount, GetTotalZoneCount());
     }
+#endif
 }
 
 uint32 DangerZoneCache::GetTotalZoneCount() const

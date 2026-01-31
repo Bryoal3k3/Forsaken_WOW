@@ -424,8 +424,18 @@ bool TravelingStrategy::FindGrindSpot(Player* pBot)
 
     m_targetX = chosenSpot->x + offsetX;
     m_targetY = chosenSpot->y + offsetY;
-    m_targetZ = chosenSpot->z;
     m_targetName = chosenSpot->name;
+
+    // Correct Z using terrain height (ignore stored Z which may be invalid/underground)
+    if (Map* map = pBot->GetMap())
+    {
+        float terrainZ = map->GetHeight(m_targetX, m_targetY, MAX_HEIGHT);
+        m_targetZ = (terrainZ > INVALID_HEIGHT) ? terrainZ : chosenSpot->z;
+    }
+    else
+    {
+        m_targetZ = chosenSpot->z;
+    }
 
     return true;
 }

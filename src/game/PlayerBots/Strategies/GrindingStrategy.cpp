@@ -318,6 +318,21 @@ bool GrindingStrategy::HasValidPathTo(Player* pBot, Creature* pCreature) const
     if ((type & PATHFIND_NOPATH) || (type & PATHFIND_NOT_USING_PATH))
         return false;
 
+    // Check path length vs straight-line distance
+    // If path is 2x+ longer, target is probably through a cave/around terrain
+    float straightDist = pBot->GetDistance(pCreature);
+    if (straightDist > 5.0f)  // Only check for non-trivial distances
+    {
+        float pathLength = path.Length();
+        if (pathLength > straightDist * PATH_LENGTH_RATIO)
+        {
+            sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
+                "[Grinding] %s rejecting %s - path too long (%.1f vs %.1f straight)",
+                pBot->GetName(), pCreature->GetName(), pathLength, straightDist);
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -354,6 +369,24 @@ void GrindingStrategy::ClearTarget(Player* pBot)
     m_currentTarget.Clear();
     m_state = GrindState::IDLE;
     m_approachStartTime = 0;
+}
+
+void GrindingStrategy::Reset(Player* pBot)
+{
+    ClearTarget(pBot);
+    m_noMobsCount = 0;
+    m_backoffLevel = 0;
+    m_skipTicks = 0;
+}
+
+void GrindingStrategy::SetTarget(Creature* pTarget)
+{
+    if (pTarget)
+    {
+        m_currentTarget = pTarget->GetObjectGuid();
+        m_state = GrindState::IN_COMBAT;
+        m_approachStartTime = WorldTimer::getMSTime();
+    }
 }
 
 Creature* GrindingStrategy::GetCurrentTargetCreature(Player* pBot) const

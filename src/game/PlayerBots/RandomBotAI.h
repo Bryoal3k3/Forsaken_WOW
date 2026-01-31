@@ -121,6 +121,13 @@ private:
     uint32 m_invalidPosCount = 0;
     static constexpr uint32 INVALID_POS_THRESHOLD = 15;  // Ticks (seconds) before recovery teleport
 
+    // Long-term stuck detection (bot not moving for extended period)
+    float m_lastProgressX = 0.0f;
+    float m_lastProgressY = 0.0f;
+    uint32 m_lastProgressTime = 0;
+    static constexpr float STUCK_MOVE_THRESHOLD = 2.0f;      // Must move at least 2 yards
+    static constexpr uint32 STUCK_TIME_THRESHOLD = 300000;   // 5 minutes in milliseconds
+
     // Death handling strategy
     std::unique_ptr<GhostWalkingStrategy> m_ghostStrategy;
 

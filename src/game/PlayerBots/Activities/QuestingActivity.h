@@ -138,6 +138,10 @@ private:
     float m_goTargetX = 0.0f, m_goTargetY = 0.0f, m_goTargetZ = 0.0f;
     uint32 m_goTargetEntry = 0;
     bool m_travelingToGameObject = false;
+    uint32 m_goNoProgressTimer = 0;        // How long at a GO spawn with no item progress
+    uint32 m_lastGoItemCount = 0;          // Track item count for progress detection
+    static constexpr uint32 GO_RELOCATE_MS = 10000;  // 10 sec without progress → try different spawn
+    static constexpr float GO_RELOCATE_MIN_DIST = 50.0f;  // Skip spawns within this range when relocating
 
     // Exploration quest working state
     float m_exploreTargetX = 0.0f, m_exploreTargetY = 0.0f, m_exploreTargetZ = 0.0f;

@@ -78,8 +78,8 @@ bool BotObjectInteraction::LootObject(Player* pBot, GameObject* pObject)
     if (!CanInteractWith(pBot, pObject))
         return false;
 
-    // Use the object (triggers loot generation for chests, quest objects, etc.)
-    pObject->Use(pBot);
+    // Open loot explicitly (same pattern as LootingBehavior for creatures)
+    pBot->SendLoot(pObject->GetObjectGuid(), LOOT_SKINNING);
 
     // Take all items from the gameobject's loot
     Loot& loot = pObject->loot;

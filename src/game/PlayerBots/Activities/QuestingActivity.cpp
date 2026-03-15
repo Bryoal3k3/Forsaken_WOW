@@ -326,39 +326,99 @@ void QuestingActivity::HandleSelectingQuest(Player* pBot)
     std::vector<uint32> itemGoTargets = BuildItemGameObjectList(pBot);
     if (!itemGoTargets.empty())
     {
-        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
-            "[QuestingActivity] %s has %zu item-from-GO targets",
-            pBot->GetName(), itemGoTargets.size());
-    }
-    if (!itemGoTargets.empty())
-    {
         m_travelingToMobArea = false;
         m_travelingToGameObject = false;
 
-        // Find closest gameobject spawn
+        // Determine minimum search distance — if we've been stuck, skip nearby spawns
+        float minDist = (m_goNoProgressTimer >= GO_RELOCATE_MS) ? GO_RELOCATE_MIN_DIST : 0.0f;
+
+        float bestDist = FLT_MAX;
+        float bestX = 0, bestY = 0, bestZ = 0;
+        uint32 bestEntry = 0;
+
         for (uint32 goEntry : itemGoTargets)
         {
+            float spawnX, spawnY, spawnZ;
             if (BotQuestCache::FindGameObjectSpawnLocation(goEntry, pBot->GetMapId(),
                     pBot->GetPositionX(), pBot->GetPositionY(),
-                    m_goTargetX, m_goTargetY, m_goTargetZ))
+                    spawnX, spawnY, spawnZ))
             {
-                m_goTargetEntry = goEntry;
-                m_travelingToGameObject = true;
-                m_stuckTimer = 0;
-                m_lastDistanceCheckTime = 0;
-                m_lastDistanceToTarget = FLT_MAX;
+                float dx = spawnX - pBot->GetPositionX();
+                float dy = spawnY - pBot->GetPositionY();
+                float dist = std::sqrt(dx * dx + dy * dy);
 
+                if (dist < minDist)
+                    continue;  // Skip nearby spawns when relocating
+
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    bestX = spawnX;
+                    bestY = spawnY;
+                    bestZ = spawnZ;
+                    bestEntry = goEntry;
+                }
+            }
+        }
+
+        if (bestEntry != 0)
+        {
+            m_goTargetX = bestX;
+            m_goTargetY = bestY;
+            m_goTargetZ = bestZ;
+            m_goTargetEntry = bestEntry;
+            m_travelingToGameObject = true;
+            m_stuckTimer = 0;
+            m_lastDistanceCheckTime = 0;
+            m_lastDistanceToTarget = FLT_MAX;
+
+            // Snapshot current item count for progress tracking
+            m_lastGoItemCount = 0;
+            for (int i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
+            {
+                Quest const* pQ = nullptr;
+                for (uint16 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+                {
+                    uint32 qId = pBot->GetUInt32Value(PLAYER_QUEST_LOG_1_1 + slot * MAX_QUEST_OFFSET + QUEST_ID_OFFSET);
+                    if (qId == 0) continue;
+                    Quest const* q = sObjectMgr.GetQuestTemplate(qId);
+                    if (q)
+                    {
+                        for (int j = 0; j < QUEST_ITEM_OBJECTIVES_COUNT; ++j)
+                        {
+                            if (q->ReqItemId[j] != 0)
+                                m_lastGoItemCount += pBot->GetItemCount(q->ReqItemId[j]);
+                        }
+                    }
+                }
+                break;  // Only need to count once
+            }
+
+            if (m_goNoProgressTimer >= GO_RELOCATE_MS)
+            {
+                sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                    "[QuestingActivity] %s relocating to different GO spawn (entry %u) at (%.1f, %.1f, %.1f) dist %.0f",
+                    pBot->GetName(), bestEntry, bestX, bestY, bestZ, bestDist);
+                m_goNoProgressTimer = 0;
+            }
+            else
+            {
                 sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
                     "[QuestingActivity] %s traveling to loot gameobject (entry %u) at (%.1f, %.1f, %.1f)",
-                    pBot->GetName(), goEntry, m_goTargetX, m_goTargetY, m_goTargetZ);
-
-                if (m_pMovementMgr)
-                    m_pMovementMgr->MoveTo(m_goTargetX, m_goTargetY, m_goTargetZ,
-                                            MovementPriority::PRIORITY_NORMAL);
-
-                m_state = QuestActivityState::WORKING_ON_QUEST;
-                return;
+                    pBot->GetName(), bestEntry, bestX, bestY, bestZ);
             }
+
+            if (m_pMovementMgr)
+                m_pMovementMgr->MoveTo(m_goTargetX, m_goTargetY, m_goTargetZ,
+                                        MovementPriority::PRIORITY_NORMAL);
+
+            m_state = QuestActivityState::WORKING_ON_QUEST;
+            return;
+        }
+        else if (m_goNoProgressTimer >= GO_RELOCATE_MS)
+        {
+            // Tried relocating but no other spawn found — reset and try closest again
+            m_goNoProgressTimer = 0;
         }
     }
 
@@ -441,11 +501,19 @@ void QuestingActivity::HandleWorkingOnQuest(Player* pBot, uint32 diff)
             GameObject* pGo = BotObjectInteraction::FindNearbyObject(pBot, m_goTargetEntry, 15.0f);
             if (pGo)
             {
-                // Use LootObject for item-source GOs, InteractWith for quest objective GOs
                 BotObjectInteraction::LootObject(pBot, pGo);
                 sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
                     "[QuestingActivity] %s interacted with quest object %s (entry %u)",
                     pBot->GetName(), pGo->GetGOInfo()->name.c_str(), m_goTargetEntry);
+            }
+            else
+            {
+                // GO not here (despawned) — force relocate to a different spawn immediately
+                sLog.Out(LOG_BASIC, LOG_LVL_DETAIL,
+                    "[QuestingActivity] %s: GO entry %u not found at destination, relocating",
+                    pBot->GetName(), m_goTargetEntry);
+                m_goNoProgressTimer = GO_RELOCATE_MS;  // Trigger relocate in SelectingQuest
+                m_state = QuestActivityState::SELECTING_QUEST;
             }
             return;
         }
@@ -570,6 +638,7 @@ void QuestingActivity::HandleWorkingOnQuest(Player* pBot, uint32 diff)
             if (pGo && BotObjectInteraction::CanInteractWith(pBot, pGo))
             {
                 BotObjectInteraction::LootObject(pBot, pGo);
+                m_goNoProgressTimer = 0;
                 sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
                     "[QuestingActivity] %s looted quest item from %s (entry %u)",
                     pBot->GetName(), pGo->GetGOInfo()->name.c_str(), goEntry);

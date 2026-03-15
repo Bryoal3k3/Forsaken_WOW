@@ -12,15 +12,16 @@
 
 #include "CombatBotBaseAI.h"
 #include "Strategies/LootingBehavior.h"
-#include "Strategies/GrindingStrategy.h"
 #include "BotCheats.h"
 #include <memory>
 
-class IBotStrategy;
+class IBotActivity;
+class GrindingActivity;
 class GhostWalkingStrategy;
 class VendoringStrategy;
 class TravelingStrategy;
 class TrainingStrategy;
+class GrindingStrategy;
 class BotCombatMgr;
 class BotMovementManager;
 
@@ -75,11 +76,16 @@ public:
     // Movement manager accessor (centralized movement coordination)
     BotMovementManager* GetMovementManager() { return m_movementMgr.get(); }
 
+    // Activity accessor
+    IBotActivity* GetCurrentActivity() { return m_currentActivity.get(); }
+
     // Traveling strategy accessor (for GhostWalkingStrategy)
-    TravelingStrategy* GetTravelingStrategy() { return m_travelingStrategy.get(); }
+    TravelingStrategy* GetTravelingStrategy();
+    TravelingStrategy const* GetTravelingStrategy() const;
 
     // Grinding strategy accessor (for travel system integration)
-    GrindingStrategy* GetGrindingStrategy() { return static_cast<GrindingStrategy*>(m_strategy.get()); }
+    GrindingStrategy* GetGrindingStrategy();
+    GrindingStrategy const* GetGrindingStrategy() const;
 
     // Debug status for .bot status command
     BotStatusInfo GetStatusInfo() const;
@@ -108,8 +114,8 @@ private:
     ShortTimeTracker m_updateTimer;
     bool m_initialized = false;
 
-    // Strategy for high-level behavior (grinding, resting, etc.)
-    std::unique_ptr<IBotStrategy> m_strategy;
+    // Current activity (Tier 1) — coordinates high-level behavior
+    std::unique_ptr<IBotActivity> m_currentActivity;
 
     // Universal behaviors (run regardless of strategy)
     LootingBehavior m_looting;
@@ -138,9 +144,6 @@ private:
     // Training strategy (learning spells from class trainers)
     std::unique_ptr<TrainingStrategy> m_trainingStrategy;
     uint32 m_lastKnownLevel = 0;  // Track level changes for training trigger
-
-    // Traveling strategy (finding and moving to grind spots)
-    std::unique_ptr<TravelingStrategy> m_travelingStrategy;
 
     // Combat manager (handles class-specific engagement and rotations)
     std::unique_ptr<BotCombatMgr> m_combatMgr;

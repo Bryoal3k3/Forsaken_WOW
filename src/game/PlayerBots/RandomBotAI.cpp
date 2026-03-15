@@ -8,6 +8,8 @@
  */
 
 #include "RandomBotAI.h"
+#include "IBotActivity.h"
+#include "Activities/GrindingActivity.h"
 #include "BotMovementManager.h"
 #include "Combat/BotCombatMgr.h"
 #include "Strategies/GrindingStrategy.h"
@@ -38,21 +40,55 @@
 
 RandomBotAI::RandomBotAI()
     : CombatBotBaseAI()
-    , m_strategy(std::make_unique<GrindingStrategy>())
+    , m_currentActivity(std::make_unique<GrindingActivity>())
     , m_ghostStrategy(std::make_unique<GhostWalkingStrategy>())
     , m_vendoringStrategy(std::make_unique<VendoringStrategy>())
     , m_trainingStrategy(std::make_unique<TrainingStrategy>())
-    , m_travelingStrategy(std::make_unique<TravelingStrategy>())
     , m_combatMgr(std::make_unique<BotCombatMgr>())
 {
     m_updateTimer.Reset(1000);
 
     // Wire up cross-strategy references
-    if (m_travelingStrategy && m_vendoringStrategy)
-        m_travelingStrategy->SetVendoringStrategy(m_vendoringStrategy.get());
+    if (GrindingActivity* pGrinding = dynamic_cast<GrindingActivity*>(m_currentActivity.get()))
+    {
+        if (m_vendoringStrategy)
+            pGrinding->SetVendoringStrategy(m_vendoringStrategy.get());
+    }
 }
 
 RandomBotAI::~RandomBotAI() = default;
+
+// ============================================================================
+// Activity Accessors
+// ============================================================================
+
+TravelingStrategy* RandomBotAI::GetTravelingStrategy()
+{
+    if (GrindingActivity* pGrinding = dynamic_cast<GrindingActivity*>(m_currentActivity.get()))
+        return pGrinding->GetTravelingStrategy();
+    return nullptr;
+}
+
+GrindingStrategy* RandomBotAI::GetGrindingStrategy()
+{
+    if (GrindingActivity* pGrinding = dynamic_cast<GrindingActivity*>(m_currentActivity.get()))
+        return pGrinding->GetGrindingStrategy();
+    return nullptr;
+}
+
+TravelingStrategy const* RandomBotAI::GetTravelingStrategy() const
+{
+    if (GrindingActivity const* pGrinding = dynamic_cast<GrindingActivity const*>(m_currentActivity.get()))
+        return pGrinding->GetTravelingStrategy();
+    return nullptr;
+}
+
+GrindingStrategy const* RandomBotAI::GetGrindingStrategy() const
+{
+    if (GrindingActivity const* pGrinding = dynamic_cast<GrindingActivity const*>(m_currentActivity.get()))
+        return pGrinding->GetGrindingStrategy();
+    return nullptr;
+}
 
 // ============================================================================
 // Debug Status (for .bot status command)
@@ -83,7 +119,7 @@ BotStatusInfo RandomBotAI::GetStatusInfo() const
         info.currentAction = BotAction::RESTING;
         info.activeStrategy = "Resting";
     }
-    else if (m_travelingStrategy && m_travelingStrategy->IsTraveling())
+    else if (GetTravelingStrategy() && GetTravelingStrategy()->IsTraveling())
     {
         info.currentAction = BotAction::TRAVELING;
         info.activeStrategy = "TravelingStrategy";
@@ -99,10 +135,10 @@ BotStatusInfo RandomBotAI::GetStatusInfo() const
         info.currentAction = BotAction::VENDORING;
         info.activeStrategy = "VendoringStrategy";
     }
-    else if (m_strategy)
+    else if (m_currentActivity)
     {
         info.currentAction = BotAction::GRINDING;
-        info.activeStrategy = m_strategy->GetName();
+        info.activeStrategy = m_currentActivity->GetName();
     }
     else
     {
@@ -142,9 +178,11 @@ void RandomBotAI::MovementInform(uint32 movementType, uint32 data)
 {
     // Handle waypoint completion for TravelingStrategy
     // Move to next waypoint immediately (not on next Update tick) for smooth movement
-    if (movementType == POINT_MOTION_TYPE && m_travelingStrategy)
+    if (movementType == POINT_MOTION_TYPE)
     {
-        m_travelingStrategy->OnWaypointReached(me, data);
+        TravelingStrategy* pTraveling = GetTravelingStrategy();
+        if (pTraveling)
+            pTraveling->OnWaypointReached(me, data);
     }
 }
 
@@ -211,8 +249,8 @@ void RandomBotAI::UpdateAI(uint32 const diff)
                 // Reset counter and behaviors
                 m_invalidPosCount = 0;
                 ResetBehaviors();
-                if (m_travelingStrategy)
-                    m_travelingStrategy->ResetArrivalCooldown();
+                if (TravelingStrategy* pTravel = GetTravelingStrategy())
+                    pTravel->ResetArrivalCooldown();
 
                 return;
             }
@@ -254,8 +292,8 @@ void RandomBotAI::UpdateAI(uint32 const diff)
             m_lastProgressY = 0.0f;
             m_lastProgressTime = 0;
             ResetBehaviors();
-            if (m_travelingStrategy)
-                m_travelingStrategy->ResetArrivalCooldown();
+            if (TravelingStrategy* pTravel = GetTravelingStrategy())
+                pTravel->ResetArrivalCooldown();
 
             return;
         }
@@ -295,16 +333,14 @@ void RandomBotAI::UpdateAI(uint32 const diff)
         // Initialize movement manager (centralized movement coordination)
         m_movementMgr = std::make_unique<BotMovementManager>(me);
 
-        // Wire up combat manager to grinding strategy (avoids dynamic_cast in hot path)
-        if (GrindingStrategy* pGrinding = static_cast<GrindingStrategy*>(m_strategy.get()))
+        // Wire up activity with combat manager and movement manager
+        if (GrindingActivity* pGrinding = dynamic_cast<GrindingActivity*>(m_currentActivity.get()))
         {
             pGrinding->SetCombatMgr(m_combatMgr.get());
             pGrinding->SetMovementManager(m_movementMgr.get());
         }
 
-        // Wire up movement manager to all strategies
-        if (m_travelingStrategy)
-            m_travelingStrategy->SetMovementManager(m_movementMgr.get());
+        // Wire up movement manager to behaviors
         if (m_vendoringStrategy)
             m_vendoringStrategy->SetMovementManager(m_movementMgr.get());
         if (m_trainingStrategy)
@@ -342,8 +378,8 @@ void RandomBotAI::UpdateAI(uint32 const diff)
 
         m_initialized = true;
 
-        sLog.Out(LOG_BASIC, LOG_LVL_DETAIL, "[RandomBotAI] Bot %s initialized (Class: %u, Level: %u, Strategy: %s)",
-            me->GetName(), me->GetClass(), me->GetLevel(), m_strategy->GetName());
+        sLog.Out(LOG_BASIC, LOG_LVL_DETAIL, "[RandomBotAI] Bot %s initialized (Class: %u, Level: %u, Activity: %s)",
+            me->GetName(), me->GetClass(), me->GetLevel(), m_currentActivity ? m_currentActivity->GetName() : "None");
         return;
     }
 
@@ -396,9 +432,12 @@ void RandomBotAI::UpdateAI(uint32 const diff)
     }
     else
     {
-        // Let looting run first (universal behavior)
-        if (m_looting.Update(me, diff))
-            return;  // Busy looting
+        // Let looting run first (if activity allows it)
+        if (m_currentActivity && m_currentActivity->AllowsLooting())
+        {
+            if (m_looting.Update(me, diff))
+                return;  // Busy looting
+        }
 
         UpdateOutOfCombatAI();
     }
@@ -470,7 +509,7 @@ void RandomBotAI::UpdateInCombatAI()
     if (!me->IsInCombat())
     {
         // Let GrindingStrategy check its approach timeout
-        if (GrindingStrategy* pGrinding = dynamic_cast<GrindingStrategy*>(m_strategy.get()))
+        if (GrindingStrategy* pGrinding = GetGrindingStrategy())
         {
             if (pGrinding->GetState() == GrindState::APPROACHING)
             {
@@ -503,7 +542,7 @@ void RandomBotAI::UpdateOutOfCombatAI()
             if (Creature* pCreature = pAttacker->ToCreature())
             {
                 int32 levelDiff = static_cast<int32>(pCreature->GetLevel()) - static_cast<int32>(me->GetLevel());
-                bool isTraveling = m_travelingStrategy && m_travelingStrategy->IsTraveling();
+                bool isTraveling = GetTravelingStrategy() && GetTravelingStrategy()->IsTraveling();
 
                 sLog.Out(LOG_BASIC, LOG_LVL_DEBUG,
                     "[RandomBotAI] %s attacked by %s (level %u, diff %d), traveling: %s",
@@ -530,49 +569,29 @@ void RandomBotAI::UpdateOutOfCombatAI()
         }
     }
 
-    // HIGHEST PRIORITY: Training - learning new spells is critical for player power
-    // This runs before everything else to ensure bots get their spells ASAP
-    if (m_trainingStrategy && m_trainingStrategy->Update(me, RB_UPDATE_INTERVAL))
-        return;  // Busy training
+    // Activity-gated behaviors: only run if current activity allows them
 
-    // Check vendoring - bags full or gear broken?
-    // This runs before grinding so bots don't keep trying to loot with full bags
-    if (m_vendoringStrategy && m_vendoringStrategy->Update(me, RB_UPDATE_INTERVAL))
-        return;  // Busy vendoring
+    // Training - learning new spells is critical for player power
+    if (m_currentActivity && m_currentActivity->AllowsTraining())
+    {
+        if (m_trainingStrategy && m_trainingStrategy->Update(me, RB_UPDATE_INTERVAL))
+            return;  // Busy training
+    }
+
+    // Vendoring - bags full or gear broken?
+    if (m_currentActivity && m_currentActivity->AllowsVendoring())
+    {
+        if (m_vendoringStrategy && m_vendoringStrategy->Update(me, RB_UPDATE_INTERVAL))
+            return;  // Busy vendoring
+    }
 
     // Check buffs BEFORE looking for targets
     // This ensures bots maintain buffs even when targets are plentiful
     m_combatMgr->UpdateOutOfCombat(me);
 
-    // Get grinding strategy for explicit result handling
-    GrindingStrategy* pGrinding = static_cast<GrindingStrategy*>(m_strategy.get());
-    if (pGrinding)
-    {
-        GrindingResult grindResult = pGrinding->UpdateGrinding(me, 0);
-
-        if (grindResult == GrindingResult::ENGAGED)
-        {
-            // Found and attacking a target - reset travel state
-            if (m_travelingStrategy)
-                m_travelingStrategy->ResetArrivalCooldown();
-            return;
-        }
-
-        // Check if we should travel (grinding found no targets)
-        if (grindResult == GrindingResult::NO_TARGETS)
-        {
-            // Check if we've had enough consecutive failures
-            if (pGrinding->GetNoMobsCount() >= TravelConstants::NO_MOBS_THRESHOLD)
-            {
-                if (m_travelingStrategy)
-                {
-                    m_travelingStrategy->SignalNoMobs();
-                    if (m_travelingStrategy->Update(me, RB_UPDATE_INTERVAL))
-                        return;  // Busy traveling
-                }
-            }
-        }
-    }
+    // Delegate to current activity (handles grinding + traveling, or questing, etc.)
+    if (m_currentActivity)
+        m_currentActivity->Update(me, RB_UPDATE_INTERVAL);
 
 }
 

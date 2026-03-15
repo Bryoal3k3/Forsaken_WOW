@@ -1,347 +1,243 @@
 # Questing System Brainstorm
 
-**Status**: Planning / Research (Revised)
-**Created**: 2026-02-02
-**Last Updated**: 2026-02-09
+**Status**: Planning
+**Created**: 2026-03-14
 
 ---
 
 ## Overview
 
-Adding questing to bots would make them feel more alive and level more naturally. This document captures our brainstorming on how to approach this incrementally.
+Adding questing to RandomBots to make them level more naturally. This also requires an architecture refactor — introducing a tiered Activity system that cleanly supports questing, grinding, and all future bot activities (crafting, gathering, dungeons, RP).
 
 ---
 
-## Quest Types Analysis
+## Architecture: Three-Tier System
 
-### Kill Quest (Priority: HIGH)
-**User Take**: Easy lookup required creature, make bot run towards known "crowded" areas.
+The current architecture has grinding hardwired into RandomBotAI's update loop. Questing (and future activities) needs a cleaner model. The solution is three tiers:
 
-**Technical Notes**:
-- `quest_template.ReqCreatureOrGOId1-4` contains target creature entries (positive values = creatures)
-- `quest_template.ReqCreatureOrGOCount1-4` contains kill counts
-- Extends existing `GrindingStrategy` - just filter by creature entry instead of "anything nearby"
-- Use `creature` spawn table to find where required mobs spawn (has exact position per creature entry)
-- Player quest progress tracked via `Player::GetQuestSlotQuestId()`, `Player::GetQuestSlotCounter()`
+### Tier 0: Survival (ALWAYS runs, non-negotiable)
+These run for every bot, every tick, regardless of activity. No activity can disable them.
 
-**Multi-objective note**: Many quests have multiple kill targets (e.g., "Kill 10 Boars AND 8 Wolves"). `ReqCreatureOrGOId1-4` supports up to 4 separate kill targets per quest. QuestingStrategy must track ALL objectives simultaneously, not just one.
+- **Ghost walking** — bot is dead, must walk to corpse or use spirit healer
+- **React to attackers** — self preservation, fight back when attacked
+- **Resting** — low HP/mana, must recover before doing anything else
 
-**Complexity**: Low - builds on existing systems
+### Tier 1: Activity Layer (weighted selection, one active per bot)
+An activity is a **coordinator** — it decides what the bot should be doing and delegates execution to Tier 2 behaviors. Each activity declares which behaviors it allows.
 
----
+- **GrindingActivity** — find mobs, kill them, travel when area depleted
+- **QuestingActivity** — find quest givers, accept quests, complete objectives, turn in
+- **Future**: CraftingActivity, GatheringActivity, DungeonActivity, RPActivity
 
-### Collect Quest (Priority: HIGH)
-**User Take**: Similar path as kill quest.
+The **weighted activity system** assigns each bot an activity. Weighting favors questing (~70/30 over grinding), so most bots quest but some pure grinders still exist for variety.
 
-**Technical Notes**:
-- Two sub-types:
-  1. **Mob drops**: Kill mobs, loot items (already works via LootingBehavior)
-  2. **World objects**: Interact with gameobjects to collect (needs new capability)
-- `quest_template.ReqItemId1-6` and `ReqItemCount1-6` define requirements
-- `creature_loot_template` links creatures to loot items
-- For world objects: `gameobject_loot_template`
-- Note: Many quest item drops only occur when the quest is active in the player's log
-- **Multi-objective**: Quests can require BOTH kills and item collection simultaneously (e.g., "Kill 10 Gnolls AND collect 5 Gnoll Paws"). Up to 4 kill/GO targets + 6 item requirements per quest. QuestingStrategy must handle mixed-type objectives in a single quest.
+### Tier 2: Behaviors (reusable building blocks)
+Behaviors are the actual "doers" — they know how to perform a specific action but don't decide when to perform it. Any activity can use any behavior. Behaviors don't know which activity is using them.
 
-**Complexity**: Low for mob drops, Medium for world objects (needs object interaction)
+- **GrindingBehavior** — scan for mobs, approach, engage (currently GrindingStrategy)
+- **TravelingBehavior** — navigate to coordinates (currently TravelingStrategy)
+- **LootingBehavior** — loot nearby corpses (already exists)
+- **VendoringBehavior** — find vendor, sell items, repair (currently VendoringStrategy)
+- **TrainingBehavior** — find trainer, learn spells (currently TrainingStrategy)
+- **NPCInteractionBehavior** — generalized NPC interaction (new, extracted from vendor/trainer pattern)
+- **ObjectInteractionBehavior** — interact with gameobjects (new, needed for questing)
+- **ItemUsageBehavior** — use items from inventory (new, needed for quest items)
 
----
+### Activity → Behavior Permissions
 
-### Go to Location / Exploration Quest (Priority: MEDIUM)
-**User Take**: Find the completion trigger, tell bot to path.
+Each activity declares which behaviors it allows. RandomBotAI checks these before running optional behaviors (vendoring, training, looting).
 
-**Technical Notes**:
-- Exploration quests use a **separate system** from kill/collect quests
-- `areatrigger_involvedrelation` maps areatrigger IDs to quest IDs
-- Quest must have `QUEST_SPECIAL_FLAG_EXPLORATION_OR_EVENT` flag set
-- When player enters the areatrigger, `Player::AreaExploredOrEventHappens()` fires automatically
-- Bot just needs to travel to the areatrigger coordinates - completion is automatic
-- Note: `ReqCreatureOrGOId` negative values are gameobject entries, NOT areatrigger IDs
-- Some "go to" quests are simply "talk to NPC at location X" (talk quest variant)
-- `TravelingStrategy` already handles long-distance movement
+| Behavior | Grinding | Questing | Dungeons | RP |
+|----------|----------|----------|----------|------|
+| Looting | Yes | Yes | Yes | No |
+| Vendoring | Yes | Yes | No | No |
+| Training | Yes | Yes | No | No |
+| Traveling | Yes | Yes | No | Yes |
+| GrindingBehavior | Yes | Yes (filtered) | No | No |
+| NPC Interaction | No | Yes | No | Yes |
+| Object Interaction | No | Yes | No | No |
+| Item Usage | No | Yes | No | No |
 
-**Complexity**: Low - mostly just travel
+### Update Flow (after refactor)
 
----
+```
+RandomBotAI::UpdateAI():
+  Movement manager update
+  Level-up detection
 
-### Escort Quest (Priority: DEFERRED)
-**User Take**: Make sure bot doesn't travel X yards away from NPC, clear upon completion.
+  // Tier 0: Survival (always, no exceptions)
+  if dead → ghost walk → return
+  if resting → rest → return
 
-**Technical Notes**:
-- Escort quests use scripted NPCs that path on their own
-- Bot needs to:
-  1. Accept quest (triggers NPC movement)
-  2. Stay within ~30 yards of escort NPC
-  3. Kill any mobs that aggro the NPC
-  4. Detect quest completion/failure
-- Could track escort NPC via `GetQuestNpcGuid()` or scan for friendly NPCs with matching entry
-- Combat priority: attackers of escort NPC > normal targets
+  // Combat (always, no exceptions)
+  Track combat state transitions (for post-combat looting trigger)
+  if in combat or has victim → UpdateInCombatAI() → return
 
-**Complexity**: Medium-High - needs reactive behavior, escort NPCs are fragile
+  // Tier 2: Activity-allowed behaviors (gated by activity permissions)
+  if activity allows LOOTING → looting check → return if busy
+  if activity allows TRAINING → training check → return if busy
+  if activity allows VENDORING → vendoring check → return if busy
 
----
+  // Out-of-combat buffs (always)
+  m_combatMgr->UpdateOutOfCombat()
 
-### Interact with Object (Priority: HIGH - PREREQUISITE)
-**User Take**: Very important, one of the key things we need bots to be able to do.
+  // Tier 1: Activity update (the main coordination)
+  m_currentActivity->Update()
+```
 
-**Technical Notes**:
-- **This is NEW functionality** - bots currently cannot interact with gameobjects
-- `gameobject` table has spawn locations
-- `gameobject_template` has type, flags, interaction data
-- Relevant types:
-  - `GAMEOBJECT_TYPE_QUESTGIVER` (2) - quest givers
-  - `GAMEOBJECT_TYPE_CHEST` (3) - lootable containers
-  - `GAMEOBJECT_TYPE_GOOBER` (10) - interaction triggers
-- To interact: `GameObject::Use(player)` or send `CMSG_GAMEOBJ_USE` packet
-- Need to find nearby objects: `Cell::VisitGridObjects()` + `NearestGameObjectEntryInObjectRangeCheck`
+### Performance at 2500+ Bots
 
-**Complexity**: Medium - new system but mechanics are straightforward
+The tier system adds **zero meaningful overhead**. Per bot, per tick, it's one extra virtual function call (activity's Update) and a bitmask check for behavior permissions. At 2500 bots that's nanoseconds. The expensive operations (pathfinding, cache lookups, grid scans, spell casts) are identical regardless of architecture.
+
+Memory: ~100-200 bytes per activity instance. 2500 bots = ~500KB. Negligible.
+
+The weighted activity selection runs once when assigning/switching activities, not every tick.
 
 ---
 
-### Use Item (Priority: HIGH - PREREQUISITE)
-**User Take**: Have bots lookup item in inventory and use it.
+## Quest Design Decisions
 
-**Technical Notes**:
-- **This is NEW functionality** - bots don't use inventory items currently
-- `Player::GetItemByEntry(itemId)` finds item in bags
-- `Player::UseItem(item, targets)` or `CastItemUseSpell()`
-- Some items need targets (use on mob, use on object, use at location)
-- `item_template.Spells[0-4]` defines what spell the item casts
-- Quest items often have `ITEM_FLAG_CONJURED` or specific spell triggers
+### Quest Approach: Generic with Blacklist
+Bots attempt ANY quest they can accept. No curated whitelist. If specific quests cause problems during testing, add them to a blacklist table. Most vanilla quests are straightforward kill/collect and will work fine.
 
-**Complexity**: Medium - need to handle different target types
+### Quest Discovery: Hybrid (Cache + Locality Preference)
+A cache of all quest givers is built at server startup (same pattern as vendor/trainer caches). However, bots prefer quest givers **in their current area first**:
 
----
+1. Quests in current area/subzone
+2. Quests elsewhere in current zone
+3. Neighboring zones (only when current zone is dry)
+4. Never cross continents (no boats/zeppelins)
 
-### Talk to NPC (Priority: MEDIUM)
-**User Take**: Have bot target and interact.
+This prevents the robotic "beeline across the map to optimal quest giver" behavior while still keeping bots from getting stuck.
 
-**Technical Notes**:
-- Similar to existing vendoring/training - move to NPC, interact
-- `Creature::HandleGossipOption()` for gossip menu navigation
-- Some NPCs require specific gossip choices (menu navigation)
-- Simple case: just right-click NPC to trigger quest completion
-- **Important**: Turn-in NPC is often a DIFFERENT NPC than the quest giver
-  - `creature_questrelation` = who gives the quest
-  - `creature_involvedrelation` = who accepts the turn-in
-  - Travel logic must handle going to a completely different location for turn-in
+### Quest Selection Heuristic
+When a bot has multiple quests in its log, prioritize which to work on:
 
-**Complexity**: Low for simple cases, Medium if gossip menus need navigation
+1. **Lowest level quest first** — clear out easy quests
+2. **Same-level tiebreak** — if multiple quests at same level, pick closest objective
+3. **Multi-quest overlap** — build a target list from ALL active quest objectives. Prioritize mobs that satisfy multiple quests simultaneously (e.g., killing Defias Bandits for a kill quest AND a bandana drop quest at the same time)
 
----
+### Cluster Behavior
+When a bot arrives at a quest hub, it does ALL business before leaving:
+- Accept all available quests from that NPC
+- Check for other quest givers within ~50-100 yards, grab those quests too
+- Same for turn-ins: if multiple completed quests have turn-in NPCs in the same area, turn them all in
 
-### Dungeon Quests (Priority: DEFERRED)
-**User Take**: Handle at a later time.
+### Quest Log Management
+Vanilla limit: 20 quests. Bots should manage this actively:
+- **Accept freely** up to ~15-16, keeping slots open for opportunistic pickups
+- **Abandon grey quests** — too far below bot level, XP is worthless
+- **Abandon after soft timeout** — 15 min with no meaningful progress event
+- **Prioritize turn-ins** — completed quests waste log slots, turn in ASAP
 
-**Technical Notes**:
-- Requires party coordination (existing PartyBotAI handles this)
-- Requires dungeon navigation (no navmesh inside instances?)
-- Requires role awareness (tank, healer, DPS)
-- Much more complex - defer until open world questing works
+### Progress Tracking: Soft Timeout
+A bot tracks "time since last meaningful event" per quest. What counts as meaningful depends on quest type:
 
-**Complexity**: Very High - future phase
+| Quest Type | Meaningful Event |
+|------------|-----------------|
+| Kill quest | Killed a quest target creature |
+| Collect quest (mob drops) | Killed a relevant mob (even if no drop — bad RNG isn't "stuck") |
+| Collect quest (world objects) | Interacted with a quest object |
+| Exploration/travel | Significant distance moved toward objective |
+| Turn-in travel | Significant distance moved toward turn-in NPC |
 
----
+If 15 minutes pass with no meaningful event, the bot abandons the quest and moves on. No hard ceiling — if a bot is making slow but steady progress, it persists.
 
-### Group/Elite Quests (Priority: DEFERRED)
-**User Take**: Will be handled when bot grouping system is implemented.
-
-**Technical Notes**:
-- `quest_template.SuggestedPlayers` indicates group quests
-- Some quests require killing elite mobs that solo bots cannot handle
-- Bots will need to form groups and coordinate to complete these
-- Defer to future grouping system - not filtered out permanently, just not attempted solo
-
-**Complexity**: High - requires grouping AI
-
----
-
-## Design Decisions
-
-### Quest Selection
-- **Level range**: Pick quests equal to bot level, down to 4 levels below
-- **Zone**: Same zone preferred (already near quest objectives)
-- **Type**: Solo-completable only until grouping system is built
-- **Class/Race filtering**: Must check `quest_template.RequiredClasses` and `quest_template.RequiredRaces` - a Warrior should never try to pick up a Warlock pet quest
-- **Server-side validation**: `Player::CanTakeQuest()` handles level, class, race, and chain prerequisites - always use this as the final gate
-
-### Quest Log Management & Abandonment
-- **Vanilla limit**: 20 quests maximum in the quest log
-- **Active management**: Don't hoard quests the bot can't currently work on
-- **Prioritize turn-ins**: Completed quests free up log slots for new ones
-- **Abandon grey quests**: When a quest becomes grey (too far below bot level), abandon it - minimal XP, not worth completing
-- **Abandon stale quests**: If a quest has been in the log too long without progress, consider abandoning to free slots
-- **Goal**: Keep the quest log lean so there's always room for new quests
+This naturally handles impossible quests (can't path to mobs, scripted event required, etc.) without needing to identify them upfront.
 
 ### Quest Chains
-- **Key fields**: `quest_template.PrevQuestId` and `NextQuestId` define chain order
-- **Server-side handling**: `Player::CanTakeQuest()` already validates chain prerequisites
-- **Bot behavior**: If a quest giver has no available quests (all locked behind chains), the bot should move on rather than getting stuck
-- **Breadcrumb quests**: Some quests just send you to another NPC/zone - these are essentially "talk to NPC" quests that serve as travel triggers and should be handled naturally
+- `quest_template.PrevQuestId` / `NextQuestId` define chains
+- `Player::CanTakeQuest()` validates prerequisites server-side — always use as final gate
+- If a quest giver has no available quests (all chain-locked), bot moves on
+- Breadcrumb quests ("go talk to NPC in other zone") handled naturally as travel-to-NPC quests
+- Cross-continent breadcrumbs will soft-timeout and get abandoned (which is fine)
 
 ### Reward Selection
-- **Phase 1 approach**: Simple class-based heuristic (good enough for leveling gear)
+Phase 1: Simple class-based heuristic:
 
-  | Class | Pick gear with... |
-  |-------|-------------------|
-  | Warrior/Paladin | STR, STA |
-  | Rogue/Hunter | AGI, STA |
-  | Mage/Warlock/Priest | INT, STA |
-  | Druid/Shaman | INT or AGI (coin flip) |
+| Class | Prefer stats |
+|-------|-------------|
+| Warrior, Paladin | STR, STA |
+| Rogue, Hunter | AGI, STA |
+| Mage, Warlock, Priest | INT, STA |
+| Druid, Shaman | INT or AGI (coin flip) |
 
-- **Future refinement**: Full spec detection + stat weights will be built as Phase 0 prerequisites
-- **Why both**: Simple heuristic gets questing working fast; spec-aware system improves quality at higher levels where gear choices matter more
+Future: Spec-aware stat weights using talent tree analysis. Built as-needed, not upfront.
 
-### Spec Detection
-- **Source**: Database stores talent data
-- **Method**: Query talent tables to determine which tree has the most points
-- **Fallback**: If no talents yet (low level), use class defaults
-- **Note**: Meaningless below ~level 20 when bots have few talent points
+### Bot Competition at Quest Hubs
+3000 bots at the same level wanting the same quests is **authentic fresh-server behavior**. This is not a bug — it makes the world feel alive. No special handling needed.
 
-### Strategy Integration
-- **Weighted task system**: An external system (built separately, NOT part of QuestingStrategy) assigns bots their current task: questing, grinding, gathering, etc.
-- **Implementation**: The weighted task system swaps `RandomBotAI::m_strategy` between `GrindingStrategy`, `QuestingStrategy`, etc. The `IBotStrategy::Update()` interface stays the same
-- **Universal behaviors still run**: Vendoring, training, resting, looting all run regardless of which strategy is active (same as current architecture)
-- **Fallback**: If QuestingStrategy runs out of quests and can't find a quest giver, it can signal for a strategy switch (similar to how GrindingStrategy signals TravelingStrategy when no mobs are found)
-
-### Kill Sub-Tasks (QuestingStrategy + GrindingStrategy)
-- When QuestingStrategy has a kill objective, it needs GrindingStrategy's mob-finding and engagement capabilities
-- **Approach**: QuestingStrategy composes a `GrindingStrategy` instance internally as a member
-- QuestingStrategy sets a creature entry filter on its internal GrindingStrategy (via `SetQuestTargetFilter()`)
-- The internal GrindingStrategy handles scanning, target selection, approach, and combat engagement
-- QuestingStrategy monitors quest progress and clears the filter / switches objectives when done
-- This avoids duplicating mob-scanning logic and reuses the proven GrindingStrategy code
-
-### Timed Quests
-- **Decision**: Avoid initially
-- **Rationale**: `quest_template.LimitTime` quests add complexity (priority scheduling, failure handling) with low reward - very few quests use timers
-- **Future**: Can add support later when core questing is solid
+### Combat
+Combat stays exactly where it is — in RandomBotAI as a first-check before anything else. It's not a behavior, not an activity. If future activities need role-aware combat (dungeon tank/healer/DPS), that's a problem inside the combat system, not the architecture.
 
 ---
 
-## Quest Discovery
+## Quest Types (Implementation Priority)
 
-### Quest Giver Cache (Built at Server Startup)
+### Kill Quest (Priority: HIGH)
+- `quest_template.ReqCreatureOrGOId1-4` (positive = creature entries)
+- `quest_template.ReqCreatureOrGOCount1-4` for counts
+- Up to 4 kill targets per quest (multi-objective)
+- GrindingBehavior with creature entry filter — reuse existing mob scanning code
+- Use `creature` spawn table to find where required mobs spawn
 
-Follows the same proven pattern as `VendorLocation`, `TrainerLocation`, and `GrindSpotData` caches:
+### Collect Quest — Mob Drops (Priority: HIGH)
+- `quest_template.ReqItemId1-6` and `ReqItemCount1-6`
+- Reverse lookup cache: item entry → creature entries that drop it (built from `creature_loot_template` at startup)
+- GrindingBehavior with filter for mobs that drop needed items
+- Existing LootingBehavior handles the actual looting — no changes needed
+- Mixed quests (kills AND items) combine creature entries from both objectives
 
-**How it works:**
-1. At server boot, build from TWO sources:
-   - **Creature quest givers**: `creature_questrelation` + `quest_template` + `creature` spawn table
-   - **Gameobject quest givers**: `gameobject_questrelation` + `quest_template` + `gameobject` spawn table (wanted posters, signposts, etc.)
-2. Build an in-memory index of ALL quest givers (NPCs and objects): position, quests offered, requirements (level, class, race, faction, prevQuestId)
-3. Group nearby quest givers into **clusters** (within ~100 yards of each other)
-4. Static vector + mutex, shared across all bots - zero runtime DB queries
+### Collect Quest — World Objects (Priority: MEDIUM)
+- `ReqCreatureOrGOId1-4` negative values = gameobject entries (negate to get entry)
+- Requires ObjectInteractionBehavior (new)
+- Find gameobject spawns from `gameobject` table, travel to location, interact
 
-**Cluster concept:**
-- A cluster is just a grouping of nearby quest givers (a town, a camp, a hub)
-- Solo NPCs/objects in the wilderness are clusters of size 1
-- When a bot needs quests, find the nearest cluster with available quests **filtered by the bot's level, class, race, and faction**
-- At a cluster, the bot picks up ALL available quests from quest givers in that cluster (efficient)
+### Exploration Quest (Priority: MEDIUM)
+- `QUEST_SPECIAL_FLAG_EXPLORATION_OR_EVENT` flag
+- `areatrigger_involvedrelation` maps areatrigger → quest
+- Bot just travels to areatrigger coordinates — completion is automatic
+- "Talk to NPC" variants: travel to NPC, interact (same as turn-in flow)
 
-**Cross-map filtering:**
-- Quest selection must check that objectives are completable on the bot's current map
-- If a quest's kill/collect targets only spawn on a different continent, skip it (no boat/zeppelin support)
-- Filter during quest acceptance, not during cache building (cache is shared, objective locations are per-quest)
+### Use Item Quest (Priority: MEDIUM)
+- Quest items with spells in `item_template.Spells[0-4]`
+- Requires ItemUsageBehavior (new)
+- Handle target types: self-cast, target-cast (on mob/NPC), ground-target (at location)
 
-**Scalability (2500-3000 bots):**
-- Cache built once, shared by all bots (static singleton pattern)
-- Per-bot quest state tracked individually (quest log, progress)
-- All lookups are fast in-memory searches (indexed by zone, level range, faction)
-- No per-tick database queries
+### Escort Quest (Priority: DEFERRED)
+- Requires reactive behavior, escort NPCs are fragile
+- Defer until core questing is solid
 
-### Turn-in NPC/Object Cache
-
-Separate cache for turn-in targets since they are often DIFFERENT from quest givers:
-- Built from TWO sources:
-  - **Creature turn-ins**: `creature_involvedrelation` + `creature` spawn table
-  - **Gameobject turn-ins**: `gameobject_involvedrelation` + `gameobject` spawn table
-- Indexed by quest ID for fast lookup when a quest is complete
-- Same static cache pattern
-
-### Intentional Discovery
-- Bot has no quests or completed all current quests
-- Query cache: find nearest quest giver(s) with available quests for this bot
-- Travel there, pick up quests
-- Prefer clusters (more quests per trip) but don't skip solo NPCs if they're closer
-
-### Opportunistic Discovery
-- Bot is traveling, grinding, or doing other activities
-- Detect quest giver NPCs within a detection radius (e.g., 30-50 yards)
-- If the NPC has available quests for this bot, grab them on the way
-- Hooks into the existing update loop with a cooldown (check every ~10-15 seconds, not every tick)
-- Track "already checked" NPCs to avoid re-scanning the same quest giver repeatedly
-- Makes bots feel natural: grinding, stumbles across an NPC with a `!`, picks up the quest
-
-### Item-Started Quests
-- **Completely missed in original brainstorm** - many vanilla quests start from item drops
-- Examples: head/trophy items from named mobs, mysterious notes, rare drops that begin chains
-- `item_template.StartQuest` field - if non-zero, using the item starts that quest
-- **Hook point**: `LootingBehavior` - after looting a corpse, check if any looted items have `StartQuest > 0`
-- If `Player::CanTakeQuest()` passes for that quest, auto-accept it
-- No special routing needed - happens organically during normal play
-- This is one of the most natural quest behaviors: bot kills mob, loots item, quest appears in log
-- **Only accept if bot is in questing mode** - grinding-only bots should ignore quest-starting items to avoid wasting quest log slots on quests they won't turn in
+### Dungeon/Group/Elite Quests (Priority: DEFERRED)
+- Requires party system and dungeon AI
+- Not filtered out — just not attempted solo
 
 ---
 
-## Prerequisites Before Questing
+## Quest Infrastructure
 
-Before implementing full questing, we need these foundational capabilities. These are useful standalone features even without questing.
+### Quest Caches (Built at Server Startup)
 
-### 1. Object Interaction System
-```
-New files needed:
-- Utilities/BotObjectInteraction.h/cpp
+Same proven pattern as vendor/trainer/grindspot caches: static vectors, built once, shared across all bots, immutable at runtime. Zero runtime DB queries.
 
-Capabilities:
-- Find nearby gameobjects by entry ID
-- Move to object position
-- Interact with object (Use)
-- Handle loot window if object is lootable
-```
+**Quest Giver Cache:**
+- Built from `creature_questrelation` + `gameobject_questrelation` + spawn tables
+- Stores position, quest IDs offered, pre-computed filter fields (level range, class/race masks, objective map mask)
+- Partitioned by map ID for fast lookup
+- O(1) "is this NPC a quest giver?" set for opportunistic scanning
 
-### 2. Item Usage System
-```
-New files needed:
-- Utilities/BotItemUsage.h/cpp
+**Turn-in Cache:**
+- Built from `creature_involvedrelation` + `gameobject_involvedrelation` + spawn tables
+- Indexed by quest ID for O(1) lookup when a quest is complete
+- Turn-in NPC is often DIFFERENT from quest giver — never assume they're the same
 
-Capabilities:
-- Find item in bags by entry ID
-- Determine if item is usable (has spell, not on cooldown)
-- Use item with appropriate target:
-  - Self-cast items
-  - Target-cast items (on mob, on NPC)
-  - Ground-target items (at location)
-  - Object-target items
-```
+**Item Drop Cache:**
+- Built from `creature_loot_template`
+- Reverse map: item entry → creature entries that drop it
+- Eliminates all runtime DB queries for collect quests
 
-### 3. Spec Detection System
-```
-New files needed:
-- Utilities/BotSpecDetection.h/cpp
-
-Capabilities:
-- Determine bot spec from talent distribution
-- Categorize as healer/tank/dps
-- Used for reward selection (refined version)
-- Fallback to class defaults at low levels
-```
-
-### 4. Stat Weight System (for rewards)
-```
-New files needed:
-- Utilities/BotStatWeights.h/cpp
-
-Capabilities:
-- Define stat priorities per class/spec
-- Score items based on stat weights
-- Compare quest reward options
-- Pick best reward for bot's spec
-```
-
-**Note on Phase 0C/0D**: These systems are built as infrastructure but NOT actively used until higher levels. During early questing phases, reward selection uses the simple class-based heuristic from Design Decisions > Reward Selection. Once bots reach levels where gear choices matter (40+), the spec-aware stat weight system kicks in.
+### Quest Blacklist
+Simple table or config list of quest IDs bots should never attempt. Populated during testing when specific quests are found to cause problems. Empty by default.
 
 ---
 
@@ -349,143 +245,62 @@ Capabilities:
 
 | Table | Purpose |
 |-------|---------|
-| `quest_template` | Quest definitions, objectives, rewards, chain links, class/race requirements |
-| `creature_questrelation` | NPCs that **give** quests |
-| `creature_involvedrelation` | NPCs that **accept turn-ins** (often different from giver!) |
+| `quest_template` | Quest definitions, objectives, rewards, chain links |
+| `creature_questrelation` | NPCs that give quests |
+| `creature_involvedrelation` | NPCs that accept turn-ins |
 | `gameobject_questrelation` | Objects that give quests |
 | `gameobject_involvedrelation` | Objects that accept turn-ins |
 | `creature_loot_template` | What items drop from mobs |
 | `gameobject_loot_template` | What items come from objects |
 | `areatrigger_involvedrelation` | Exploration quest triggers |
-| `item_template` | Item data - `StartQuest` field for item-started quests |
-| `creature` | NPC spawn table - positions, entries (used for cache building + mob location lookup) |
-| `gameobject` | Object spawn table - positions, entries (used for cache building + world object quests) |
+| `item_template` | Item data, `StartQuest` field for item-started quests |
+| `creature` | NPC spawn positions |
+| `gameobject` | Object spawn positions |
 
 ### Key quest_template Fields
+
 | Field | Purpose |
 |-------|---------|
-| `RequiredClasses` | Bitmask - which classes can take this quest |
-| `RequiredRaces` | Bitmask - which races can take this quest |
+| `RequiredClasses` | Bitmask — which classes can take this quest |
+| `RequiredRaces` | Bitmask — which races can take this quest |
 | `PrevQuestId` | Previous quest in chain (must be completed first) |
-| `NextQuestId` | Next quest in chain (unlocked after this one) |
-| `SuggestedPlayers` | Suggested group size (>1 = group quest, defer) |
-| `LimitTime` | Time limit in seconds (0 = no limit, avoid these initially) |
-| `ReqCreatureOrGOId1-4` | Kill targets (positive = creature, negative = gameobject) |
+| `NextQuestId` | Next quest in chain |
+| `SuggestedPlayers` | Group size hint (>1 = group quest) |
+| `LimitTime` | Time limit in seconds (avoid these initially) |
+| `ReqCreatureOrGOId1-4` | Kill targets (positive=creature, negative=gameobject) |
 | `ReqCreatureOrGOCount1-4` | Required kill/interaction counts |
 | `ReqItemId1-6` | Required items to collect |
 | `ReqItemCount1-6` | Required item counts |
-| `ExclusiveGroup` | Mutually exclusive quests - completing one makes others in group unavailable |
-| `QuestFlags` | Flags like SHARABLE, STAY_ALIVE (fail on death), etc. |
-| `SpecialFlags` | `QUEST_SPECIAL_FLAG_EXPLORATION_OR_EVENT` = area trigger completion |
+| `ExclusiveGroup` | Mutually exclusive quests |
+| `QuestFlags` | SHARABLE, STAY_ALIVE, etc. |
+| `SpecialFlags` | EXPLORATION_OR_EVENT = areatrigger completion |
 
 ---
 
-## Proposed Implementation Order
+## Opportunistic Features (Later Phase)
 
-### Phase 0: Prerequisites (Non-Questing)
-1. **Object Interaction** - Ability to interact with gameobjects
-2. **Item Usage** - Ability to use items from inventory
-3. **Spec Detection** - Determine bot spec from talents
-4. **Stat Weights** - For reward selection (starts with class-based heuristic)
+### Item-Started Quests
+- Many vanilla quests start from item drops (`item_template.StartQuest`)
+- Hook in LootingBehavior: after looting, check if any items have `StartQuest > 0`
+- If bot is in questing mode and `Player::CanTakeQuest()` passes, auto-accept
+- Only accept if questing — grinding-only bots ignore to avoid filling quest log
 
-### Phase 1: Quest Infrastructure
-1. Quest giver cache - creatures AND gameobjects (startup, static singleton - same pattern as vendor/trainer caches)
-2. Turn-in cache - creatures AND gameobjects (separate from quest giver cache, indexed by quest ID)
-3. Quest acceptance from NPCs/objects
-4. Quest turn-in to NPCs/objects (may require traveling to a different location than quest giver)
-5. Cross-map objective filtering (skip quests with objectives on another continent)
-6. Quest log management (20 quest limit, grey/stale quest abandonment)
-7. Class/race/faction/chain filtering via `Player::CanTakeQuest()`
-8. QuestingStrategy skeleton with state machine
-
-### Phase 2: Kill Quests
-1. Parse kill objectives from `quest_template`
-2. Filter GrindingStrategy to target specific creatures
-3. Track kill progress
-4. Return to turn-in NPC when complete (may differ from quest giver)
-
-### Phase 3: Collect Quests (Mob Drops)
-1. Parse item objectives
-2. Identify which mobs drop required items
-3. Grind those mobs, loot as normal
-4. Track item collection progress
-
-### Phase 4: Collect Quests (World Objects)
-1. Find gameobjects that contain quest items
-2. Travel to and interact with objects (uses Phase 0 Object Interaction)
-3. Loot items from objects
-
-### Phase 5: Exploration Quests
-1. Parse destination from quest data
-2. Travel to location
-3. Trigger area-based completion
-
-### Phase 6: Item Usage Quests
-1. Identify quest items that need to be used (uses Phase 0 Item Usage)
-2. Determine target type (self, mob, object, location)
-3. Use item appropriately
-
-### Phase 7: Opportunistic Features
-1. Item-started quests (loot hook in LootingBehavior)
-2. Opportunistic quest pickup from nearby NPCs while traveling/grinding
-
-### Future: Escort Quests
-- Requires more sophisticated reactive behavior
-- Defer until core questing is solid
-
-### Future: Group/Elite Quests
-- Requires bot grouping system
-- Bots form parties to tackle elite quests together
-
----
-
-## Architecture Vision
-
-```
-External Weighted Task System (separate from QuestingStrategy):
-  Assigns each bot a primary task based on weights:
-    - Questing (weight: X)
-    - Grinding (weight: Y)
-    - Gathering (weight: Z, future)
-    - etc.
-  Swaps RandomBotAI::m_strategy pointer accordingly
-
-GRINDING mode (current system, m_strategy = GrindingStrategy):
-  GrindingStrategy -> LootingBehavior -> VendoringStrategy -> TrainingStrategy
-
-QUESTING mode (new, m_strategy = QuestingStrategy):
-  QuestingStrategy (self-contained)
-    +-- No quests? -> Find nearest quest giver(s) -> Travel -> Pick up quests
-    +-- Has quests? -> Select one -> Work on objectives
-    |     +-- Kill objective -> GrindingStrategy with creature filter
-    |     +-- Collect (mob) -> kill specific mobs, loot as normal
-    |     +-- Collect (object) -> travel to gameobject, interact
-    |     +-- Explore objective -> travel to location
-    |     +-- Use item objective -> use quest item on target
-    +-- Quest complete? -> Travel to turn-in NPC -> Turn in -> Repeat
-    +-- No quests available? -> Signal for strategy switch (fallback to grinding)
-  (vendoring, training, resting, looting all still run - universal behaviors)
-
-Opportunistic (only when QuestingStrategy is active):
-  - Detect quest giver NPCs nearby while working on other objectives
-  - Check looted items for StartQuest field
-  - Accept available quests organically
-```
+### Opportunistic Quest Pickup
+- While working on objectives or traveling, scan for nearby quest giver NPCs every ~10-15 seconds
+- O(1) check via `IsQuestGiverEntry()` set lookup
+- If found and bot has free quest log slots, detour briefly to pick up quests
+- Makes bots feel natural: grinding for a quest, stumbles across NPC with `!`, grabs quest
 
 ---
 
 ## Notes
 
-- Work incrementally - one quest type at a time
-- Focus on prerequisites first (object interaction, item usage, spec detection, stat weights)
-- These are useful standalone features even without questing
-- Kill quests alone would be a huge improvement over pure grinding
-- QuestingStrategy is self-contained - handles acquisition, execution, and turn-in
-- All caches follow the same proven pattern: static vector, built at startup, shared across all bots
-- Scalability is critical - design everything for 2500-3000 concurrent bots
-- `Player::CanTakeQuest()` is the ultimate gate for quest eligibility - always defer to it
-- Turn-in NPCs and quest givers are often different - never assume they're the same
+- Prerequisites (object interaction, item usage, spec detection) built as-needed alongside the phases that require them, not upfront
+- Refactor into tier system FIRST before building questing — verify existing behavior is unchanged
+- `Player::CanTakeQuest()` is the ultimate gate for quest eligibility — always defer to it
+- All caches follow the proven pattern: static, built once at startup, shared across all bots
+- Design for 2500-3000 concurrent bots — all lookups must be fast in-memory operations
 
 ---
 
-*Last Updated: 2026-02-09*
+*Last Updated: 2026-03-14*

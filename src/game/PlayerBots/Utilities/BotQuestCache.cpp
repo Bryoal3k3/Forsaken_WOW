@@ -585,6 +585,47 @@ std::vector<uint32> const* BotQuestCache::GetCreaturesDropping(uint32 itemEntry)
 // O(1) Quest Giver Checks
 // ============================================================================
 
+// ============================================================================
+// Creature Spawn Location Lookup
+// ============================================================================
+
+bool BotQuestCache::FindCreatureSpawnLocation(uint32 creatureEntry, uint32 mapId,
+                                               float botX, float botY,
+                                               float& outX, float& outY, float& outZ)
+{
+    float closestDist = FLT_MAX;
+    bool found = false;
+
+    auto finder = [&](CreatureDataPair const& pair) {
+        CreatureData const& data = pair.second;
+        if (data.creature_id[0] != creatureEntry)
+            return false;
+        if (data.position.mapId != mapId)
+            return false;
+
+        float dx = data.position.x - botX;
+        float dy = data.position.y - botY;
+        float dist = dx * dx + dy * dy;  // squared distance is fine for comparison
+
+        if (dist < closestDist)
+        {
+            closestDist = dist;
+            outX = data.position.x;
+            outY = data.position.y;
+            outZ = data.position.z;
+            found = true;
+        }
+        return false;  // continue iteration
+    };
+    sObjectMgr.DoCreatureData(finder);
+
+    return found;
+}
+
+// ============================================================================
+// O(1) Quest Giver Checks
+// ============================================================================
+
 bool BotQuestCache::IsQuestGiverCreature(uint32 creatureEntry)
 {
     return s_questGiverCreatureEntries.count(creatureEntry) > 0;

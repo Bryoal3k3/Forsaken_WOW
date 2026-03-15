@@ -80,6 +80,8 @@ GrindingStrategy* RandomBotAI::GetGrindingStrategy()
 {
     if (GrindingActivity* pGrinding = dynamic_cast<GrindingActivity*>(m_currentActivity.get()))
         return pGrinding->GetGrindingStrategy();
+    if (QuestingActivity* pQuesting = dynamic_cast<QuestingActivity*>(m_currentActivity.get()))
+        return pQuesting->GetGrindingStrategy();
     return nullptr;
 }
 
@@ -94,6 +96,8 @@ GrindingStrategy const* RandomBotAI::GetGrindingStrategy() const
 {
     if (GrindingActivity const* pGrinding = dynamic_cast<GrindingActivity const*>(m_currentActivity.get()))
         return pGrinding->GetGrindingStrategy();
+    if (QuestingActivity const* pQuesting = dynamic_cast<QuestingActivity const*>(m_currentActivity.get()))
+        return pQuesting->GetGrindingStrategy();
     return nullptr;
 }
 

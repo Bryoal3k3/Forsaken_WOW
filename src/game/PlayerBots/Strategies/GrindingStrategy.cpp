@@ -32,6 +32,22 @@ GrindingStrategy::GrindingStrategy()
 }
 
 // ============================================================================
+// Quest Target Filter
+// ============================================================================
+
+void GrindingStrategy::SetQuestTargetFilter(std::vector<uint32> const& creatureEntries)
+{
+    m_questTargetFilter = creatureEntries;
+    m_hasQuestFilter = !m_questTargetFilter.empty();
+}
+
+void GrindingStrategy::ClearQuestTargetFilter()
+{
+    m_questTargetFilter.clear();
+    m_hasQuestFilter = false;
+}
+
+// ============================================================================
 // IBotStrategy Interface
 // ============================================================================
 
@@ -268,14 +284,34 @@ bool GrindingStrategy::IsValidGrindTarget(Player* pBot, Creature* pCreature) con
     if (pCreature->GetCreatureInfo()->type == CREATURE_TYPE_CRITTER)
         return false;
 
-    // Skip elite mobs
-    if (pCreature->IsElite())
+    // Quest target filter: if active, ONLY accept matching creature entries
+    if (m_hasQuestFilter)
+    {
+        uint32 entry = pCreature->GetEntry();
+        bool matched = false;
+        for (uint32 filterEntry : m_questTargetFilter)
+        {
+            if (filterEntry == entry)
+            {
+                matched = true;
+                break;
+            }
+        }
+        if (!matched)
+            return false;
+    }
+
+    // Skip elite mobs (unless quest filter is active — quest mobs may be elite)
+    if (pCreature->IsElite() && !m_hasQuestFilter)
         return false;
 
-    // Level check: same level or up to LEVEL_RANGE below (no higher level mobs)
-    int32 levelDiff = (int32)pCreature->GetLevel() - (int32)pBot->GetLevel();
-    if (levelDiff < -LEVEL_RANGE || levelDiff > 0)
-        return false;
+    // Level check: relax when quest filter is active (quest mobs may be any level)
+    if (!m_hasQuestFilter)
+    {
+        int32 levelDiff = (int32)pCreature->GetLevel() - (int32)pBot->GetLevel();
+        if (levelDiff < -LEVEL_RANGE || levelDiff > 0)
+            return false;
+    }
 
     // Skip evading creatures
     if (pCreature->IsInEvadeMode())

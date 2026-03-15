@@ -94,6 +94,12 @@ public:
     // Public because AllGrindTargets checker needs access
     bool IsValidGrindTarget(Player* pBot, Creature* pCreature) const;
 
+    // Quest target filter: when set, only target these creature entries
+    // Used by QuestingActivity for kill quest objectives
+    void SetQuestTargetFilter(std::vector<uint32> const& creatureEntries);
+    void ClearQuestTargetFilter();
+    bool HasQuestTargetFilter() const { return m_hasQuestFilter; }
+
 private:
     // === Target Finding ===
 
@@ -137,6 +143,10 @@ private:
     // Adaptive search - backoff when no mobs found
     uint32 m_skipTicks = 0;
     uint32 m_backoffLevel = 0;
+
+    // Quest target filter (set by QuestingActivity)
+    std::vector<uint32> m_questTargetFilter;
+    bool m_hasQuestFilter = false;
 
     // === Configuration ===
 

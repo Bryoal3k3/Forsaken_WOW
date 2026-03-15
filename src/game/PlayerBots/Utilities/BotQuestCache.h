@@ -95,6 +95,14 @@ public:
     // Returns nullptr if item not in loot tables.
     static std::vector<uint32> const* GetCreaturesDropping(uint32 itemEntry);
 
+    // ---- Creature spawn location lookup ----
+
+    // Find nearest spawn of a creature entry on a given map.
+    // Returns false if no spawn found. Outputs coordinates.
+    static bool FindCreatureSpawnLocation(uint32 creatureEntry, uint32 mapId,
+                                           float botX, float botY,
+                                           float& outX, float& outY, float& outZ);
+
     // ---- O(1) "is this NPC a quest giver?" checks ----
 
     static bool IsQuestGiverCreature(uint32 creatureEntry);

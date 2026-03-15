@@ -17,9 +17,9 @@
 
 #include "PlayerBots/IBotActivity.h"
 #include "PlayerBots/Utilities/BotQuestCache.h"
+#include "PlayerBots/Strategies/GrindingStrategy.h"
 #include <memory>
 
-class GrindingStrategy;
 class BotCombatMgr;
 class BotMovementManager;
 class Creature;
@@ -64,15 +64,16 @@ public:
     bool AllowsTraining() const override { return true; }
 
     // Wiring (called by RandomBotAI during initialization)
-    void SetCombatMgr(BotCombatMgr* pMgr) { m_pCombatMgr = pMgr; }
-    void SetMovementManager(BotMovementManager* pMgr) { m_pMovementMgr = pMgr; }
+    void SetCombatMgr(BotCombatMgr* pMgr);
+    void SetMovementManager(BotMovementManager* pMgr);
 
     // Query
     QuestActivityState GetState() const { return m_state; }
     bool WantsActivitySwitch() const { return m_state == QuestActivityState::NO_QUESTS_AVAILABLE; }
 
     // Access internal grinding behavior (for RandomBotAI attacker handling)
-    GrindingStrategy* GetGrindingStrategy() { return nullptr; }  // Q3+ will add this
+    GrindingStrategy* GetGrindingStrategy() { return m_grindingHelper.get(); }
+    GrindingStrategy const* GetGrindingStrategy() const { return m_grindingHelper.get(); }
 
 private:
     // ---- State handlers ----
@@ -98,6 +99,12 @@ private:
     void AcceptAvailableQuestsFromCluster(Player* pBot);
     bool TurnInQuest(Player* pBot, Creature* pNPC, uint32 questId);
 
+    // ---- Kill quest helpers ----
+    // Build combined creature target list from ALL active quest kill objectives
+    std::vector<uint32> BuildKillTargetList(Player* pBot) const;
+    // Check all quests for completion and mark them ready for turn-in
+    void UpdateQuestCompletion(Player* pBot);
+
     // ---- State ----
     QuestActivityState m_state = QuestActivityState::CHECKING_QUEST_LOG;
 
@@ -105,10 +112,20 @@ private:
     BotCombatMgr* m_pCombatMgr = nullptr;
     BotMovementManager* m_pMovementMgr = nullptr;
 
+    // Internal GrindingStrategy for kill sub-tasks
+    std::unique_ptr<GrindingStrategy> m_grindingHelper;
+
     // Current targets
     QuestGiverInfo const* m_targetGiver = nullptr;
     QuestTurnInInfo const* m_targetTurnIn = nullptr;
     uint32 m_activeQuestId = 0;         // Quest currently being turned in
+
+    // Kill quest working state
+    float m_mobAreaX = 0.0f, m_mobAreaY = 0.0f, m_mobAreaZ = 0.0f;
+    bool m_travelingToMobArea = false;
+
+    // Track last known kill counts for progress logging (questId -> total kills)
+    std::unordered_map<uint32, uint32> m_lastKnownKillCounts;
 
     // Travel stuck detection (same pattern as VendoringStrategy/TrainingStrategy)
     uint32 m_stuckTimer = 0;

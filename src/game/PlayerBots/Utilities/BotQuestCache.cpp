@@ -622,6 +622,46 @@ bool BotQuestCache::FindCreatureSpawnLocation(uint32 creatureEntry, uint32 mapId
     return found;
 }
 
+bool BotQuestCache::FindGameObjectSpawnLocation(uint32 goEntry, uint32 mapId,
+                                                  float botX, float botY,
+                                                  float& outX, float& outY, float& outZ)
+{
+    // Query gameobject spawn table (no DoGameObjectData equivalent, so use SQL)
+    // This runs rarely (only when bot needs to travel to a gameobject), so SQL is acceptable
+    std::unique_ptr<QueryResult> result(WorldDatabase.PQuery(
+        "SELECT position_x, position_y, position_z FROM gameobject WHERE id = %u AND map = %u",
+        goEntry, mapId));
+
+    if (!result)
+        return false;
+
+    float closestDist = FLT_MAX;
+    bool found = false;
+
+    do
+    {
+        Field* fields = result->Fetch();
+        float x = fields[0].GetFloat();
+        float y = fields[1].GetFloat();
+        float z = fields[2].GetFloat();
+
+        float dx = x - botX;
+        float dy = y - botY;
+        float dist = dx * dx + dy * dy;
+
+        if (dist < closestDist)
+        {
+            closestDist = dist;
+            outX = x;
+            outY = y;
+            outZ = z;
+            found = true;
+        }
+    } while (result->NextRow());
+
+    return found;
+}
+
 // ============================================================================
 // O(1) Quest Giver Checks
 // ============================================================================

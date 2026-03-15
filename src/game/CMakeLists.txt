@@ -204,6 +204,7 @@ set (game_SRCS
     PlayerBots/Activities/GrindingActivity.cpp
     PlayerBots/Activities/QuestingActivity.cpp
     PlayerBots/Utilities/BotQuestCache.cpp
+    PlayerBots/Utilities/BotObjectInteraction.cpp
     PlayerBots/Strategies/GrindingStrategy.cpp
     PlayerBots/Strategies/GhostWalkingStrategy.cpp
     PlayerBots/Strategies/VendoringStrategy.cpp
@@ -454,6 +455,7 @@ set (game_SRCS
     PlayerBots/Activities/GrindingActivity.h
     PlayerBots/Activities/QuestingActivity.h
     PlayerBots/Utilities/BotQuestCache.h
+    PlayerBots/Utilities/BotObjectInteraction.h
     PlayerBots/Strategies/IBotStrategy.h
     PlayerBots/Strategies/GrindingStrategy.h
     PlayerBots/Strategies/GhostWalkingStrategy.h

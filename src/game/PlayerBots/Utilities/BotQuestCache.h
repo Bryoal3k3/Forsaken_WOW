@@ -103,6 +103,12 @@ public:
                                            float botX, float botY,
                                            float& outX, float& outY, float& outZ);
 
+    // Find nearest spawn of a gameobject entry on a given map.
+    // Returns false if no spawn found. Outputs coordinates.
+    static bool FindGameObjectSpawnLocation(uint32 goEntry, uint32 mapId,
+                                             float botX, float botY,
+                                             float& outX, float& outY, float& outZ);
+
     // ---- O(1) "is this NPC a quest giver?" checks ----
 
     static bool IsQuestGiverCreature(uint32 creatureEntry);

@@ -99,11 +99,15 @@ private:
     void AcceptAvailableQuestsFromCluster(Player* pBot);
     bool TurnInQuest(Player* pBot, Creature* pNPC, uint32 questId);
 
-    // ---- Kill quest helpers ----
-    // Build combined creature target list from ALL active quest kill objectives
+    // ---- Quest objective helpers ----
+    // Build combined creature target list from ALL active quest kill + collect objectives
     std::vector<uint32> BuildKillTargetList(Player* pBot) const;
+    // Build list of gameobject entries needed for quest objectives
+    std::vector<uint32> BuildGameObjectTargetList(Player* pBot) const;
     // Check all quests for completion and mark them ready for turn-in
     void UpdateQuestCompletion(Player* pBot);
+    // Try to interact with nearby quest gameobjects
+    bool TryInteractWithQuestObjects(Player* pBot);
 
     // ---- State ----
     QuestActivityState m_state = QuestActivityState::CHECKING_QUEST_LOG;
@@ -120,12 +124,21 @@ private:
     QuestTurnInInfo const* m_targetTurnIn = nullptr;
     uint32 m_activeQuestId = 0;         // Quest currently being turned in
 
-    // Kill quest working state
+    // Kill/collect quest working state
     float m_mobAreaX = 0.0f, m_mobAreaY = 0.0f, m_mobAreaZ = 0.0f;
     bool m_travelingToMobArea = false;
 
+    // Gameobject quest working state
+    float m_goTargetX = 0.0f, m_goTargetY = 0.0f, m_goTargetZ = 0.0f;
+    uint32 m_goTargetEntry = 0;
+    bool m_travelingToGameObject = false;
+
     // Track last known kill counts for progress logging (questId -> total kills)
     std::unordered_map<uint32, uint32> m_lastKnownKillCounts;
+
+    // Track failed gameobject interactions (goEntry -> tick when last tried)
+    std::unordered_map<uint32, uint32> m_goInteractCooldowns;
+    static constexpr uint32 GO_INTERACT_COOLDOWN_MS = 10000;  // 10 sec cooldown between interact attempts
 
     // Travel stuck detection (same pattern as VendoringStrategy/TrainingStrategy)
     uint32 m_stuckTimer = 0;

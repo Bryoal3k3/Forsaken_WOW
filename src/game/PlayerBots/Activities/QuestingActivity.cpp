@@ -7,9 +7,11 @@
  */
 
 #include "QuestingActivity.h"
+#include "PlayerBots/Utilities/BotObjectInteraction.h"
 #include "PlayerBots/BotMovementManager.h"
 #include "Player.h"
 #include "Creature.h"
+#include "GameObject.h"
 #include "ObjectMgr.h"
 #include "QuestDef.h"
 #include "Log.h"
@@ -20,6 +22,7 @@
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "DBCStructure.h"
+#include "ObjectDefines.h"
 #include <cmath>
 #include <cfloat>
 
@@ -300,15 +303,25 @@ void QuestingActivity::HandleSelectingQuest(Player* pBot)
         return;
     }
 
-    // No kill objectives available — try to pick up more quests if room
-    if (GetFreeQuestSlots(pBot) > 5)
+    // No kill objectives — check for gameobject objectives
+    std::vector<uint32> goTargets = BuildGameObjectTargetList(pBot);
+    if (!goTargets.empty())
+    {
+        m_travelingToMobArea = false;
+        m_state = QuestActivityState::WORKING_ON_QUEST;
+        return;
+    }
+
+    // No actionable objectives at all — if bot has no quests, try finding a quest giver
+    // If bot HAS quests but can't work on them, fall back to grinding (don't bounce)
+    if (!HasIncompleteQuests(pBot) && GetFreeQuestSlots(pBot) > 5)
     {
         m_state = QuestActivityState::FINDING_QUEST_GIVER;
     }
     else
     {
-        // Have quests but can't work on them (may need object interaction etc.)
-        // Signal no work available — will fall back to grinding
+        // Have quests but none are actionable (need quest types we don't support yet)
+        // Fall back to grinding instead of bouncing between quest givers
         m_state = QuestActivityState::NO_QUESTS_AVAILABLE;
     }
 }
@@ -332,11 +345,85 @@ void QuestingActivity::HandleWorkingOnQuest(Player* pBot, uint32 diff)
         return;
     }
 
+    // Try interacting with nearby quest gameobjects first (cheap check)
+    if (TryInteractWithQuestObjects(pBot))
+        return;
+
+    // Handle gameobject travel if active
+    if (m_travelingToGameObject)
+    {
+        float dist = pBot->GetDistance(m_goTargetX, m_goTargetY, m_goTargetZ);
+        if (dist <= INTERACTION_DISTANCE + 2.0f)
+        {
+            // Arrived at gameobject location — try to interact
+            m_travelingToGameObject = false;
+            GameObject* pGo = BotObjectInteraction::FindNearbyObject(pBot, m_goTargetEntry, 15.0f);
+            if (pGo)
+            {
+                BotObjectInteraction::InteractWith(pBot, pGo);
+                sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                    "[QuestingActivity] %s interacted with quest object %s (entry %u)",
+                    pBot->GetName(), pGo->GetGOInfo()->name.c_str(), m_goTargetEntry);
+            }
+            return;
+        }
+
+        // Stuck detection
+        m_stuckTimer += diff;
+        m_lastDistanceCheckTime += diff;
+        if (m_lastDistanceCheckTime >= DISTANCE_CHECK_INTERVAL_MS)
+        {
+            if (std::abs(dist - m_lastDistanceToTarget) < 1.0f)
+            {
+                if (m_pMovementMgr)
+                    m_pMovementMgr->MoveTo(m_goTargetX, m_goTargetY, m_goTargetZ,
+                                            MovementPriority::PRIORITY_NORMAL);
+            }
+            m_lastDistanceToTarget = dist;
+            m_lastDistanceCheckTime = 0;
+        }
+        if (m_stuckTimer >= STUCK_TIMEOUT_MS)
+        {
+            m_travelingToGameObject = false;
+            m_state = QuestActivityState::SELECTING_QUEST;
+        }
+        return;
+    }
+
     // Refresh kill targets (in case a quest objective was completed)
     std::vector<uint32> killTargets = BuildKillTargetList(pBot);
     if (killTargets.empty())
     {
-        // No more kill objectives — go back to selecting
+        // No kill objectives — check for gameobject objectives
+        std::vector<uint32> goTargets = BuildGameObjectTargetList(pBot);
+        if (!goTargets.empty())
+        {
+            // Find closest gameobject spawn
+            for (uint32 goEntry : goTargets)
+            {
+                if (BotQuestCache::FindGameObjectSpawnLocation(goEntry, pBot->GetMapId(),
+                        pBot->GetPositionX(), pBot->GetPositionY(),
+                        m_goTargetX, m_goTargetY, m_goTargetZ))
+                {
+                    m_goTargetEntry = goEntry;
+                    m_travelingToGameObject = true;
+                    m_stuckTimer = 0;
+                    m_lastDistanceCheckTime = 0;
+                    m_lastDistanceToTarget = FLT_MAX;
+
+                    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                        "[QuestingActivity] %s traveling to quest object (entry %u) at (%.1f, %.1f, %.1f)",
+                        pBot->GetName(), goEntry, m_goTargetX, m_goTargetY, m_goTargetZ);
+
+                    if (m_pMovementMgr)
+                        m_pMovementMgr->MoveTo(m_goTargetX, m_goTargetY, m_goTargetZ,
+                                                MovementPriority::PRIORITY_NORMAL);
+                    return;
+                }
+            }
+        }
+
+        // No kill or gameobject objectives — go back to selecting
         m_grindingHelper->ClearQuestTargetFilter();
         m_travelingToMobArea = false;
         m_state = QuestActivityState::SELECTING_QUEST;
@@ -897,6 +984,27 @@ std::vector<uint32> QuestingActivity::BuildKillTargetList(Player* pBot) const
             for (uint32 creatureEntry : *dropSources)
                 AddTargetEntry(targets, creatureEntry);
         }
+
+        // --- Source item objectives: ReqSourceId1-4 (items needed before GO interaction) ---
+        for (int i = 0; i < QUEST_SOURCE_ITEM_IDS_COUNT; ++i)
+        {
+            uint32 srcItemId = pQuest->ReqSourceId[i];
+            uint32 srcItemCount = pQuest->ReqSourceCount[i];
+            if (srcItemId == 0 || srcItemCount == 0)
+                continue;
+
+            // Check if already have the source item
+            if (pBot->GetItemCount(srcItemId) >= srcItemCount)
+                continue;
+
+            // Look up which creatures drop this source item
+            std::vector<uint32> const* dropSources = BotQuestCache::GetCreaturesDropping(srcItemId);
+            if (!dropSources || dropSources->empty())
+                continue;
+
+            for (uint32 creatureEntry : *dropSources)
+                AddTargetEntry(targets, creatureEntry);
+        }
     }
 
     return targets;
@@ -972,5 +1080,105 @@ void QuestingActivity::UpdateQuestCompletion(Player* pBot)
             }
         }
     }
+}
+
+// ============================================================================
+// Gameobject Quest Helpers
+// ============================================================================
+
+std::vector<uint32> QuestingActivity::BuildGameObjectTargetList(Player* pBot) const
+{
+    std::vector<uint32> targets;
+
+    for (uint16 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+    {
+        uint32 questId = pBot->GetUInt32Value(PLAYER_QUEST_LOG_1_1 + slot * MAX_QUEST_OFFSET + QUEST_ID_OFFSET);
+        if (questId == 0)
+            continue;
+
+        if (pBot->GetQuestStatus(questId) != QUEST_STATUS_INCOMPLETE)
+            continue;
+
+        Quest const* pQuest = sObjectMgr.GetQuestTemplate(questId);
+        if (!pQuest)
+            continue;
+
+        QuestStatusData const* statusData = pBot->GetQuestStatusData(questId);
+
+        for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
+        {
+            int32 reqId = pQuest->ReqCreatureOrGOId[i];
+            if (reqId >= 0)
+                continue;  // Positive = creature (handled by kill targets), 0 = none
+
+            uint32 goEntry = static_cast<uint32>(-reqId);
+
+            uint32 reqCount = pQuest->ReqCreatureOrGOCount[i];
+            if (reqCount == 0)
+                continue;
+
+            if (statusData && statusData->m_creatureOrGOcount[i] >= reqCount)
+                continue;
+
+            // Check if this objective requires a source item the bot doesn't have yet
+            // ReqSourceId maps to objectives — check if any source item is missing
+            bool missingSourceItem = false;
+            for (int s = 0; s < QUEST_SOURCE_ITEM_IDS_COUNT; ++s)
+            {
+                uint32 srcItemId = pQuest->ReqSourceId[s];
+                uint32 srcItemCount = pQuest->ReqSourceCount[s];
+                if (srcItemId != 0 && srcItemCount > 0)
+                {
+                    if (pBot->GetItemCount(srcItemId) < srcItemCount)
+                    {
+                        missingSourceItem = true;
+                        break;
+                    }
+                }
+            }
+
+            if (missingSourceItem)
+                continue;  // Need source item first — skip this GO objective
+
+            AddTargetEntry(targets, goEntry);
+        }
+    }
+
+    return targets;
+}
+
+bool QuestingActivity::TryInteractWithQuestObjects(Player* pBot)
+{
+    std::vector<uint32> goTargets = BuildGameObjectTargetList(pBot);
+    if (goTargets.empty())
+        return false;
+
+    uint32 now = WorldTimer::getMSTime();
+
+    // If we recently interacted, wait for the cast/channel to finish before doing anything
+    for (auto const& cooldown : m_goInteractCooldowns)
+    {
+        if (WorldTimer::getMSTimeDiff(cooldown.second, now) < GO_INTERACT_COOLDOWN_MS)
+            return false;  // Still waiting — don't spam, let bot idle
+    }
+
+    for (uint32 goEntry : goTargets)
+    {
+        GameObject* pGo = BotObjectInteraction::FindNearbyObject(pBot, goEntry, 10.0f);
+        if (pGo && BotObjectInteraction::CanInteractWith(pBot, pGo))
+        {
+            BotObjectInteraction::InteractWith(pBot, pGo);
+
+            // Set cooldown — wait before trying again (goobers may need cast time)
+            m_goInteractCooldowns[goEntry] = now;
+
+            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                "[QuestingActivity] %s interacted with quest object %s (entry %u)",
+                pBot->GetName(), pGo->GetGOInfo()->name.c_str(), goEntry);
+            return true;
+        }
+    }
+
+    return false;
 }
 

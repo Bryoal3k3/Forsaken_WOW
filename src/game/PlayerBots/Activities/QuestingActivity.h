@@ -102,8 +102,10 @@ private:
     // ---- Quest objective helpers ----
     // Build combined creature target list from ALL active quest kill + collect objectives
     std::vector<uint32> BuildKillTargetList(Player* pBot) const;
-    // Build list of gameobject entries needed for quest objectives
+    // Build list of gameobject entries needed for quest objectives (ReqCreatureOrGOId < 0)
     std::vector<uint32> BuildGameObjectTargetList(Player* pBot) const;
+    // Build list of gameobject entries that contain needed quest items (ReqItemId from GO loot)
+    std::vector<uint32> BuildItemGameObjectList(Player* pBot) const;
     // Check all quests for completion and mark them ready for turn-in
     void UpdateQuestCompletion(Player* pBot);
     // Try to interact with nearby quest gameobjects
@@ -129,6 +131,8 @@ private:
     // Kill/collect quest working state
     float m_mobAreaX = 0.0f, m_mobAreaY = 0.0f, m_mobAreaZ = 0.0f;
     bool m_travelingToMobArea = false;
+    uint32 m_noMobsAtAreaTimer = 0;    // How long we've been scanning with no targets
+    static constexpr uint32 NO_MOBS_RELOCATE_MS = 10000;  // Relocate after 10 sec of no mobs
 
     // Gameobject quest working state
     float m_goTargetX = 0.0f, m_goTargetY = 0.0f, m_goTargetZ = 0.0f;
@@ -155,6 +159,10 @@ private:
     // Search jitter (prevents all bots from searching on same tick)
     uint32 m_searchDelayTimer = 0;
     bool m_searchDelayActive = false;
+
+    // NO_QUESTS_AVAILABLE re-check timer
+    uint32 m_noQuestsTimer = 0;
+    static constexpr uint32 NO_QUESTS_RECHECK_MS = 30000;  // Re-check every 30 sec
 
     // Constants
     static constexpr float NPC_INTERACT_RANGE = 5.0f;

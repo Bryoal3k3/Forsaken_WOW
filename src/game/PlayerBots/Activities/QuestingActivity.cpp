@@ -99,7 +99,17 @@ bool QuestingActivity::Update(Player* pBot, uint32 diff)
             return true;
 
         case QuestActivityState::NO_QUESTS_AVAILABLE:
-            return false;  // Signal to caller: switch to grinding
+        {
+            // Periodically re-check in case quests became available (leveled up, etc.)
+            m_noQuestsTimer += diff;
+            if (m_noQuestsTimer >= NO_QUESTS_RECHECK_MS)
+            {
+                m_noQuestsTimer = 0;
+                m_state = QuestActivityState::CHECKING_QUEST_LOG;
+                return true;
+            }
+            return false;  // Idle — let bot do nothing (or grinding if wired up)
+        }
     }
 
     return false;
@@ -312,6 +322,46 @@ void QuestingActivity::HandleSelectingQuest(Player* pBot)
         return;
     }
 
+    // Check for items that come from gameobjects (e.g., Cactus Apples)
+    std::vector<uint32> itemGoTargets = BuildItemGameObjectList(pBot);
+    if (!itemGoTargets.empty())
+    {
+        sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+            "[QuestingActivity] %s has %zu item-from-GO targets",
+            pBot->GetName(), itemGoTargets.size());
+    }
+    if (!itemGoTargets.empty())
+    {
+        m_travelingToMobArea = false;
+        m_travelingToGameObject = false;
+
+        // Find closest gameobject spawn
+        for (uint32 goEntry : itemGoTargets)
+        {
+            if (BotQuestCache::FindGameObjectSpawnLocation(goEntry, pBot->GetMapId(),
+                    pBot->GetPositionX(), pBot->GetPositionY(),
+                    m_goTargetX, m_goTargetY, m_goTargetZ))
+            {
+                m_goTargetEntry = goEntry;
+                m_travelingToGameObject = true;
+                m_stuckTimer = 0;
+                m_lastDistanceCheckTime = 0;
+                m_lastDistanceToTarget = FLT_MAX;
+
+                sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                    "[QuestingActivity] %s traveling to loot gameobject (entry %u) at (%.1f, %.1f, %.1f)",
+                    pBot->GetName(), goEntry, m_goTargetX, m_goTargetY, m_goTargetZ);
+
+                if (m_pMovementMgr)
+                    m_pMovementMgr->MoveTo(m_goTargetX, m_goTargetY, m_goTargetZ,
+                                            MovementPriority::PRIORITY_NORMAL);
+
+                m_state = QuestActivityState::WORKING_ON_QUEST;
+                return;
+            }
+        }
+    }
+
     // Check for exploration quests
     uint32 exploreQuestId = FindExplorationQuest(pBot);
     if (exploreQuestId != 0)
@@ -386,12 +436,13 @@ void QuestingActivity::HandleWorkingOnQuest(Player* pBot, uint32 diff)
         float dist = pBot->GetDistance(m_goTargetX, m_goTargetY, m_goTargetZ);
         if (dist <= INTERACTION_DISTANCE + 2.0f)
         {
-            // Arrived at gameobject location — try to interact
+            // Arrived at gameobject location — try to interact/loot
             m_travelingToGameObject = false;
             GameObject* pGo = BotObjectInteraction::FindNearbyObject(pBot, m_goTargetEntry, 15.0f);
             if (pGo)
             {
-                BotObjectInteraction::InteractWith(pBot, pGo);
+                // Use LootObject for item-source GOs, InteractWith for quest objective GOs
+                BotObjectInteraction::LootObject(pBot, pGo);
                 sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
                     "[QuestingActivity] %s interacted with quest object %s (entry %u)",
                     pBot->GetName(), pGo->GetGOInfo()->name.c_str(), m_goTargetEntry);
@@ -510,6 +561,23 @@ void QuestingActivity::HandleWorkingOnQuest(Player* pBot, uint32 diff)
     }
     m_grindingHelper->SetQuestTargetFilter(killTargets);
 
+    // Try looting nearby item-source gameobjects (e.g., Cactus Apples)
+    {
+        std::vector<uint32> itemGoTargets = BuildItemGameObjectList(pBot);
+        for (uint32 goEntry : itemGoTargets)
+        {
+            GameObject* pGo = BotObjectInteraction::FindNearbyObject(pBot, goEntry, 10.0f);
+            if (pGo && BotObjectInteraction::CanInteractWith(pBot, pGo))
+            {
+                BotObjectInteraction::LootObject(pBot, pGo);
+                sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                    "[QuestingActivity] %s looted quest item from %s (entry %u)",
+                    pBot->GetName(), pGo->GetGOInfo()->name.c_str(), goEntry);
+                return;
+            }
+        }
+    }
+
     // If traveling to mob area, handle travel (don't scan for mobs during travel)
     if (m_travelingToMobArea)
     {
@@ -559,11 +627,19 @@ void QuestingActivity::HandleWorkingOnQuest(Player* pBot, uint32 diff)
     GrindingResult result = m_grindingHelper->UpdateGrinding(pBot, 0);
 
     if (result == GrindingResult::ENGAGED)
-        return;  // Found and fighting quest mobs
+    {
+        m_noMobsAtAreaTimer = 0;  // Reset — we found something
+        return;
+    }
 
     if (result == GrindingResult::NO_TARGETS)
     {
-        // No quest mobs nearby — find the CLOSEST spawn across ALL target entries
+        m_noMobsAtAreaTimer += diff;
+
+        // Find closest spawn across ALL target entries
+        // Use minimum distance threshold to skip spawns we're already at
+        float minSearchDist = (m_noMobsAtAreaTimer >= NO_MOBS_RELOCATE_MS) ? 75.0f : 0.0f;
+
         float bestDist = FLT_MAX;
         float bestX = 0, bestY = 0, bestZ = 0;
         uint32 bestEntry = 0;
@@ -579,6 +655,10 @@ void QuestingActivity::HandleWorkingOnQuest(Player* pBot, uint32 diff)
                 float dy = spawnY - pBot->GetPositionY();
                 float dist = std::sqrt(dx * dx + dy * dy);
 
+                // When relocating, skip spawns we're already near
+                if (dist < minSearchDist)
+                    continue;
+
                 if (dist < bestDist)
                 {
                     bestDist = dist;
@@ -590,36 +670,34 @@ void QuestingActivity::HandleWorkingOnQuest(Player* pBot, uint32 diff)
             }
         }
 
-        if (bestEntry != 0)
+        if (bestEntry != 0 && bestDist > 75.0f)
         {
-            if (bestDist > 75.0f)
-            {
-                m_mobAreaX = bestX;
-                m_mobAreaY = bestY;
-                m_mobAreaZ = bestZ;
+            m_mobAreaX = bestX;
+            m_mobAreaY = bestY;
+            m_mobAreaZ = bestZ;
+            m_noMobsAtAreaTimer = 0;
 
-                sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
-                    "[QuestingActivity] %s traveling to quest mob area (entry %u) at (%.1f, %.1f, %.1f) dist %.0f",
-                    pBot->GetName(), bestEntry, m_mobAreaX, m_mobAreaY, m_mobAreaZ, bestDist);
+            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                "[QuestingActivity] %s traveling to quest mob area (entry %u) at (%.1f, %.1f, %.1f) dist %.0f",
+                pBot->GetName(), bestEntry, m_mobAreaX, m_mobAreaY, m_mobAreaZ, bestDist);
 
-                if (m_pMovementMgr)
-                    m_pMovementMgr->MoveTo(m_mobAreaX, m_mobAreaY, m_mobAreaZ,
-                                            MovementPriority::PRIORITY_NORMAL);
+            if (m_pMovementMgr)
+                m_pMovementMgr->MoveTo(m_mobAreaX, m_mobAreaY, m_mobAreaZ,
+                                        MovementPriority::PRIORITY_NORMAL);
 
-                m_travelingToMobArea = true;
-                m_stuckTimer = 0;
-                m_lastDistanceCheckTime = 0;
-                m_lastDistanceToTarget = FLT_MAX;
-                return;
-            }
-            // Spawn is close but no mobs found — they might be dead, keep scanning
+            m_travelingToMobArea = true;
+            m_stuckTimer = 0;
+            m_lastDistanceCheckTime = 0;
+            m_lastDistanceToTarget = FLT_MAX;
             return;
         }
 
-        // Couldn't find spawn location — go back to selecting
-        sLog.Out(LOG_BASIC, LOG_LVL_DETAIL,
-            "[QuestingActivity] %s could not find spawn location for quest mobs",
-            pBot->GetName());
+        // No further spawn found — if timer hasn't expired, keep scanning
+        if (m_noMobsAtAreaTimer < NO_MOBS_RELOCATE_MS)
+            return;
+
+        // Timed out and no other spawns — go back to selecting
+        m_noMobsAtAreaTimer = 0;
         m_grindingHelper->ClearQuestTargetFilter();
         m_state = QuestActivityState::SELECTING_QUEST;
     }
@@ -1259,6 +1337,58 @@ bool QuestingActivity::TryInteractWithQuestObjects(Player* pBot)
     }
 
     return false;
+}
+
+// ============================================================================
+// Item-from-Gameobject Helpers
+// ============================================================================
+
+std::vector<uint32> QuestingActivity::BuildItemGameObjectList(Player* pBot) const
+{
+    std::vector<uint32> targets;
+
+    for (uint16 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+    {
+        uint32 questId = pBot->GetUInt32Value(PLAYER_QUEST_LOG_1_1 + slot * MAX_QUEST_OFFSET + QUEST_ID_OFFSET);
+        if (questId == 0)
+            continue;
+
+        if (pBot->GetQuestStatus(questId) != QUEST_STATUS_INCOMPLETE)
+            continue;
+
+        Quest const* pQuest = sObjectMgr.GetQuestTemplate(questId);
+        if (!pQuest)
+            continue;
+
+        for (int i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
+        {
+            uint32 itemId = pQuest->ReqItemId[i];
+            if (itemId == 0)
+                continue;
+
+            uint32 reqCount = pQuest->ReqItemCount[i];
+            if (reqCount == 0)
+                continue;
+
+            if (pBot->GetItemCount(itemId) >= reqCount)
+                continue;
+
+            // Skip items that drop from creatures (handled by BuildKillTargetList)
+            std::vector<uint32> const* creatureSources = BotQuestCache::GetCreaturesDropping(itemId);
+            if (creatureSources && !creatureSources->empty())
+                continue;
+
+            // Check if item comes from a gameobject
+            std::vector<uint32> const* goSources = BotQuestCache::GetGameObjectsDropping(itemId);
+            if (!goSources || goSources->empty())
+                continue;
+
+            for (uint32 goEntry : *goSources)
+                AddTargetEntry(targets, goEntry);
+        }
+    }
+
+    return targets;
 }
 
 // ============================================================================

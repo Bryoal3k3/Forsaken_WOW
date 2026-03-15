@@ -95,6 +95,10 @@ public:
     // Returns nullptr if item not in loot tables.
     static std::vector<uint32> const* GetCreaturesDropping(uint32 itemEntry);
 
+    // Get gameobject entries that contain a specific item (chests, herbs, quest objects).
+    // Returns nullptr if item not in gameobject loot tables.
+    static std::vector<uint32> const* GetGameObjectsDropping(uint32 itemEntry);
+
     // ---- Creature spawn location lookup ----
 
     // Find nearest spawn of a creature entry on a given map.
@@ -144,6 +148,7 @@ private:
 
     // ---- Item drop reverse cache ----
     static std::unordered_map<uint32 /*itemEntry*/, std::vector<uint32> /*creatureEntries*/> s_itemDropSources;
+    static std::unordered_map<uint32 /*itemEntry*/, std::vector<uint32> /*goEntries*/> s_itemGoSources;
     static bool s_itemDropCacheBuilt;
     static std::mutex s_itemDropCacheMutex;
 

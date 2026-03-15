@@ -32,6 +32,7 @@ std::mutex BotQuestCache::s_turnInCacheMutex;
 uint32 BotQuestCache::s_totalTurnInCount = 0;
 
 std::unordered_map<uint32, std::vector<uint32>> BotQuestCache::s_itemDropSources;
+std::unordered_map<uint32, std::vector<uint32>> BotQuestCache::s_itemGoSources;
 bool BotQuestCache::s_itemDropCacheBuilt = false;
 std::mutex BotQuestCache::s_itemDropCacheMutex;
 
@@ -430,11 +431,64 @@ void BotQuestCache::BuildItemDropCache()
         } while (result->NextRow());
     }
 
+    // Step 2: Build gameobject item source reverse lookup
+    // gameobject_loot_template.entry is a loot ID, not a GO entry.
+    // gameobject_template.data1 = loot ID for type 3 (CHEST) objects.
+    uint32 goMappingCount = 0;
+    {
+        // First build lootId -> items map
+        std::unordered_map<uint32, std::vector<uint32>> lootIdToItems;
+        std::unique_ptr<QueryResult> goLootResult(WorldDatabase.Query(
+            "SELECT entry, item FROM gameobject_loot_template WHERE item > 0"));
+        if (goLootResult)
+        {
+            do
+            {
+                Field* fields = goLootResult->Fetch();
+                uint32 lootId = fields[0].GetUInt32();
+                uint32 itemEntry = fields[1].GetUInt32();
+                lootIdToItems[lootId].push_back(itemEntry);
+            } while (goLootResult->NextRow());
+        }
+
+        // Then map lootId -> gameobject entry via gameobject_template (type 3, data1 = lootId)
+        std::unique_ptr<QueryResult> goTemplateResult(WorldDatabase.Query(
+            "SELECT entry, data1 FROM gameobject_template WHERE type = 3 AND data1 > 0"));
+        if (goTemplateResult)
+        {
+            do
+            {
+                Field* fields = goTemplateResult->Fetch();
+                uint32 goEntry = fields[0].GetUInt32();
+                uint32 lootId = fields[1].GetUInt32();
+
+                auto it = lootIdToItems.find(lootId);
+                if (it == lootIdToItems.end())
+                    continue;
+
+                for (uint32 itemEntry : it->second)
+                {
+                    auto& entries = s_itemGoSources[itemEntry];
+                    bool found = false;
+                    for (uint32 e : entries)
+                    {
+                        if (e == goEntry) { found = true; break; }
+                    }
+                    if (!found)
+                    {
+                        entries.push_back(goEntry);
+                        goMappingCount++;
+                    }
+                }
+            } while (goTemplateResult->NextRow());
+        }
+    }
+
     s_itemDropCacheBuilt = true;
 
     sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
-        ">> Item drop cache: %zu items mapped to %u creature sources",
-        s_itemDropSources.size(), mappingCount);
+        ">> Item drop cache: %zu items from %u creature sources, %zu items from %u gameobject sources",
+        s_itemDropSources.size(), mappingCount, s_itemGoSources.size(), goMappingCount);
 }
 
 // ============================================================================
@@ -576,6 +630,18 @@ std::vector<uint32> const* BotQuestCache::GetCreaturesDropping(uint32 itemEntry)
 
     auto it = s_itemDropSources.find(itemEntry);
     if (it == s_itemDropSources.end())
+        return nullptr;
+
+    return &it->second;
+}
+
+std::vector<uint32> const* BotQuestCache::GetGameObjectsDropping(uint32 itemEntry)
+{
+    if (!s_itemDropCacheBuilt)
+        return nullptr;
+
+    auto it = s_itemGoSources.find(itemEntry);
+    if (it == s_itemGoSources.end())
         return nullptr;
 
     return &it->second;

@@ -78,10 +78,23 @@ bool BotObjectInteraction::LootObject(Player* pBot, GameObject* pObject)
     if (!CanInteractWith(pBot, pObject))
         return false;
 
-    // Use the object first (this triggers loot generation for chests etc.)
+    // Use the object (triggers loot generation for chests, quest objects, etc.)
     pObject->Use(pBot);
 
-    // Release loot after use
+    // Take all items from the gameobject's loot
+    Loot& loot = pObject->loot;
+
+    // Take gold first
+    if (loot.gold > 0)
+    {
+        pBot->ModifyMoney(loot.gold);
+        loot.gold = 0;
+    }
+
+    // Take all items
+    pBot->AutoStoreLoot(loot);
+
+    // Release loot (closes loot window, marks object as looted)
     if (pBot->GetSession())
         pBot->GetSession()->DoLootRelease(pObject->GetObjectGuid());
 

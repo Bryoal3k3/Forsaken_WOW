@@ -10,6 +10,7 @@
 #include "RandomBotAI.h"
 #include "IBotActivity.h"
 #include "Activities/GrindingActivity.h"
+#include "Activities/QuestingActivity.h"
 #include "BotMovementManager.h"
 #include "Combat/BotCombatMgr.h"
 #include "Strategies/GrindingStrategy.h"
@@ -40,7 +41,6 @@
 
 RandomBotAI::RandomBotAI()
     : CombatBotBaseAI()
-    , m_currentActivity(std::make_unique<GrindingActivity>())
     , m_ghostStrategy(std::make_unique<GhostWalkingStrategy>())
     , m_vendoringStrategy(std::make_unique<VendoringStrategy>())
     , m_trainingStrategy(std::make_unique<TrainingStrategy>())
@@ -48,7 +48,14 @@ RandomBotAI::RandomBotAI()
 {
     m_updateTimer.Reset(1000);
 
-    // Wire up cross-strategy references
+    // Weighted activity assignment: 30% questing, 70% grinding
+    // Phase Q12 will make this configurable
+    if (urand(1, 100) <= 30)
+        m_currentActivity = std::make_unique<QuestingActivity>();
+    else
+        m_currentActivity = std::make_unique<GrindingActivity>();
+
+    // Wire up cross-strategy references for GrindingActivity
     if (GrindingActivity* pGrinding = dynamic_cast<GrindingActivity*>(m_currentActivity.get()))
     {
         if (m_vendoringStrategy)
@@ -137,7 +144,11 @@ BotStatusInfo RandomBotAI::GetStatusInfo() const
     }
     else if (m_currentActivity)
     {
-        info.currentAction = BotAction::GRINDING;
+        // Differentiate between activity types for debug display
+        if (dynamic_cast<QuestingActivity const*>(m_currentActivity.get()))
+            info.currentAction = BotAction::QUESTING;
+        else
+            info.currentAction = BotAction::GRINDING;
         info.activeStrategy = m_currentActivity->GetName();
     }
     else
@@ -338,6 +349,11 @@ void RandomBotAI::UpdateAI(uint32 const diff)
         {
             pGrinding->SetCombatMgr(m_combatMgr.get());
             pGrinding->SetMovementManager(m_movementMgr.get());
+        }
+        else if (QuestingActivity* pQuesting = dynamic_cast<QuestingActivity*>(m_currentActivity.get()))
+        {
+            pQuesting->SetCombatMgr(m_combatMgr.get());
+            pQuesting->SetMovementManager(m_movementMgr.get());
         }
 
         // Wire up movement manager to behaviors

@@ -202,6 +202,7 @@ set (game_SRCS
     PlayerBots/DangerZoneCache.cpp
     PlayerBots/BotMovementManager.cpp
     PlayerBots/Activities/GrindingActivity.cpp
+    PlayerBots/Activities/QuestingActivity.cpp
     PlayerBots/Utilities/BotQuestCache.cpp
     PlayerBots/Strategies/GrindingStrategy.cpp
     PlayerBots/Strategies/GhostWalkingStrategy.cpp
@@ -451,6 +452,7 @@ set (game_SRCS
     PlayerBots/BotMovementManager.h
     PlayerBots/IBotActivity.h
     PlayerBots/Activities/GrindingActivity.h
+    PlayerBots/Activities/QuestingActivity.h
     PlayerBots/Utilities/BotQuestCache.h
     PlayerBots/Strategies/IBotStrategy.h
     PlayerBots/Strategies/GrindingStrategy.h

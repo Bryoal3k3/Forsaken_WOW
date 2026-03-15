@@ -17,6 +17,7 @@
 
 class IBotActivity;
 class GrindingActivity;
+class QuestingActivity;
 class GhostWalkingStrategy;
 class VendoringStrategy;
 class TravelingStrategy;
@@ -30,6 +31,7 @@ enum class BotAction
 {
     IDLE,
     GRINDING,
+    QUESTING,
     COMBAT,
     LOOTING,
     RESTING,

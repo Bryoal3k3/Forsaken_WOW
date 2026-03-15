@@ -105,9 +105,10 @@ public:
     static uint32 GetQuestGiverCount() { return s_totalGiverCount; }
     static uint32 GetTurnInCount() { return s_totalTurnInCount; }
 
-private:
     // Faction check helper (same pattern as VendoringStrategy/TrainingStrategy)
     static bool IsFactionFriendly(Player* pBot, uint32 factionTemplateId);
+
+private:
 
     // ---- Quest giver cache (partitioned by map) ----
     static std::unordered_map<uint32 /*mapId*/, std::vector<QuestGiverInfo>> s_questGiversByMap;

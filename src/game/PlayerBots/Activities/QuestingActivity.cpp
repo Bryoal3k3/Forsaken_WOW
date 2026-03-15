@@ -23,6 +23,7 @@
 #include "GridNotifiersImpl.h"
 #include "DBCStructure.h"
 #include "ObjectDefines.h"
+#include "Formulas.h"
 #include <cmath>
 #include <cfloat>
 
@@ -156,6 +157,9 @@ void QuestingActivity::OnLeaveCombat(Player* pBot)
 
 void QuestingActivity::HandleCheckingQuestLog(Player* pBot)
 {
+    // Manage quest log first — abandon grey/stale quests
+    ManageQuestLog(pBot);
+
     // Check if we have any completed quests to turn in first (highest priority)
     uint32 completedQuestId = FindCompletedQuest(pBot);
     if (completedQuestId != 0)
@@ -1264,6 +1268,7 @@ void QuestingActivity::UpdateQuestCompletion(Player* pBot)
                 if (totalProgress > lastKnown)
                 {
                     lastKnown = totalProgress;
+                    m_questLastProgressTime[questId] = WorldTimer::getMSTime();
 
                     // Log kill objective progress
                     for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
@@ -1503,3 +1508,63 @@ uint32 QuestingActivity::FindExplorationQuest(Player* pBot) const
     return 0;
 }
 
+// ============================================================================
+// Quest Log Management
+// ============================================================================
+
+void QuestingActivity::ManageQuestLog(Player* pBot)
+{
+    uint32 now = WorldTimer::getMSTime();
+    uint32 playerLevel = pBot->GetLevel();
+    uint32 grayLevel = MaNGOS::XP::GetGrayLevel(playerLevel);
+
+    for (uint16 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+    {
+        uint32 questId = pBot->GetUInt32Value(PLAYER_QUEST_LOG_1_1 + slot * MAX_QUEST_OFFSET + QUEST_ID_OFFSET);
+        if (questId == 0)
+            continue;
+
+        QuestStatus status = pBot->GetQuestStatus(questId);
+        if (status != QUEST_STATUS_INCOMPLETE)
+            continue;
+
+        Quest const* pQuest = sObjectMgr.GetQuestTemplate(questId);
+        if (!pQuest)
+            continue;
+
+        // Abandon grey quests — XP is worthless
+        uint32 questLevel = pQuest->GetQuestLevel();
+        if (questLevel > 0 && questLevel <= grayLevel)
+        {
+            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                "[QuestingActivity] %s abandoning grey quest [%u] %s (quest level %u, grey at %u)",
+                pBot->GetName(), questId, pQuest->GetTitle().c_str(), questLevel, grayLevel);
+
+            pBot->RemoveQuest(questId);
+            m_lastKnownKillCounts.erase(questId);
+            m_questLastProgressTime.erase(questId);
+            continue;
+        }
+
+        // Soft timeout — only applies to quests we've been actively working on
+        // A quest gets a timestamp when it first makes progress (kill, loot, etc.)
+        // If no progress for 15 min AFTER first progress, it's stale
+        auto progressIt = m_questLastProgressTime.find(questId);
+        if (progressIt != m_questLastProgressTime.end())
+        {
+            // Only abandon if we've been trying and failing — not new quests
+            if (WorldTimer::getMSTimeDiff(progressIt->second, now) >= QUEST_SOFT_TIMEOUT_MS)
+            {
+                sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                    "[QuestingActivity] %s abandoning stale quest [%u] %s (no progress for 15 min)",
+                    pBot->GetName(), questId, pQuest->GetTitle().c_str());
+
+                pBot->RemoveQuest(questId);
+                m_lastKnownKillCounts.erase(questId);
+                m_questLastProgressTime.erase(questId);
+                break;  // Only abandon one per check cycle
+            }
+        }
+        // Quests without a progress timestamp haven't been worked on yet — leave them alone
+    }
+}

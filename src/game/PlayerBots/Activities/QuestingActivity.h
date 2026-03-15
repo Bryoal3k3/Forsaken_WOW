@@ -108,6 +108,8 @@ private:
     std::vector<uint32> BuildItemGameObjectList(Player* pBot) const;
     // Check all quests for completion and mark them ready for turn-in
     void UpdateQuestCompletion(Player* pBot);
+    // Abandon grey and stale quests to free log slots
+    void ManageQuestLog(Player* pBot);
     // Try to interact with nearby quest gameobjects
     bool TryInteractWithQuestObjects(Player* pBot);
     // Find an exploration quest the bot can work on (returns questId, 0 if none)
@@ -150,6 +152,10 @@ private:
 
     // Track last known kill counts for progress logging (questId -> total kills)
     std::unordered_map<uint32, uint32> m_lastKnownKillCounts;
+
+    // Soft timeout: track last progress time per quest (questId -> timestamp ms)
+    std::unordered_map<uint32, uint32> m_questLastProgressTime;
+    static constexpr uint32 QUEST_SOFT_TIMEOUT_MS = 900000;  // 15 minutes
 
     // Track failed gameobject interactions (goEntry -> tick when last tried)
     std::unordered_map<uint32, uint32> m_goInteractCooldowns;

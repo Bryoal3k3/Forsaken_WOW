@@ -202,6 +202,7 @@ set (game_SRCS
     PlayerBots/DangerZoneCache.cpp
     PlayerBots/BotMovementManager.cpp
     PlayerBots/Activities/GrindingActivity.cpp
+    PlayerBots/Utilities/BotQuestCache.cpp
     PlayerBots/Strategies/GrindingStrategy.cpp
     PlayerBots/Strategies/GhostWalkingStrategy.cpp
     PlayerBots/Strategies/VendoringStrategy.cpp
@@ -450,6 +451,7 @@ set (game_SRCS
     PlayerBots/BotMovementManager.h
     PlayerBots/IBotActivity.h
     PlayerBots/Activities/GrindingActivity.h
+    PlayerBots/Utilities/BotQuestCache.h
     PlayerBots/Strategies/IBotStrategy.h
     PlayerBots/Strategies/GrindingStrategy.h
     PlayerBots/Strategies/GhostWalkingStrategy.h
@@ -552,6 +554,7 @@ include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/PacketBroadcast
   ${CMAKE_CURRENT_SOURCE_DIR}/PlayerBots
   ${CMAKE_CURRENT_SOURCE_DIR}/PlayerBots/Activities
+  ${CMAKE_CURRENT_SOURCE_DIR}/PlayerBots/Utilities
   ${CMAKE_CURRENT_SOURCE_DIR}/PlayerBots/Strategies
   ${CMAKE_CURRENT_SOURCE_DIR}/PlayerBots/Combat
   ${CMAKE_CURRENT_SOURCE_DIR}/PlayerBots/Combat/Classes

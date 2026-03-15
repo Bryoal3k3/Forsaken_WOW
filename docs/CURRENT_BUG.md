@@ -85,11 +85,17 @@ Set `AutoHonorRestart = 0` in `mangosd.conf`. Server now runs indefinitely.
 
 ---
 
+## Questing System Bugs
+
+See `docs/Quest_Implementation/KNOWN_ISSUES.md` for comprehensive tracking of all questing-related bugs, limitations, and untested features.
+
+---
+
 ## Future Enhancements (Not Bugs)
 
 ### Console Timestamps
-- User requested timestamps in console output
-- Check `mangosd.conf` for logging options or modify Log.cpp
+- **Status**: RESOLVED
+- Set `LogTime = 1` in `mangosd.conf`
 
 ### Road/Path Following for Travel
 - **Status**: Deferred
@@ -113,4 +119,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-03-14*
+*Last Updated: 2026-03-15*

@@ -1,6 +1,6 @@
 # RandomBot AI Development Progress
 
-## Project Status: Phase 7 COMPLETE (Training System)
+## Project Status: Phase 8 COMPLETE (Questing System)
 
 | Phase | Status | Description |
 |-------|--------|-------------|
@@ -14,11 +14,76 @@
 | Phase 5.5 | Complete | Auto-generated grind spots + local randomization |
 | Phase 6 | Complete | Centralized BotMovementManager |
 | Phase 7 | Complete | Automatic spell training at class trainers |
+| Phase 8 | Complete | Questing system (architecture + 12 sub-phases) |
 
 ### Active Bugs
 - Bug #12: Hunter Auto Shot cooldown spam (Low Priority - cosmetic)
+- Bug #19: Paladin Judgement casts spell ID 0 (Medium Priority)
+- See `docs/Quest_Implementation/KNOWN_ISSUES.md` for questing-specific bugs
 
 ### For older session logs, see `docs/archive/PROGRESS_ARCHIVE.md`
+
+---
+
+## 2026-03-15 - Phase 8: Questing System (Full Implementation)
+
+### What Happened
+Complete questing system built in one marathon session. 12 sub-phases implemented covering architecture refactor through full quest lifecycle.
+
+### Architecture Change
+Refactored from hardwired grinding in RandomBotAI to a three-tier Activity system:
+- **Tier 0: Survival** — Ghost walking, resting, attacker reaction (always runs)
+- **Tier 1: Activities** — GrindingActivity or QuestingActivity (weighted selection)
+- **Tier 2: Behaviors** — Reusable building blocks (grinding, traveling, vendoring, training, looting, NPC interaction, object interaction)
+
+Each activity declares which behaviors it allows. Activities are coordinators, not peers.
+
+### Sub-Phases Completed
+
+| Phase | Description |
+|-------|-------------|
+| R1 | Activity tier system refactor (IBotActivity + GrindingActivity) |
+| Q1 | Quest caches: 1902 quest givers, 4932 turn-in targets, 3761+2807 item sources |
+| Q2 | QuestingActivity skeleton — accept/turn-in loop with 10-state machine |
+| Q3 | Kill quest objectives — GrindingStrategy target filter, mob spawn travel |
+| Q4 | Collect quest objectives — item drop reverse cache, closest spawn selection |
+| Q5 | Object interaction — BotObjectInteraction utility, GO quests, ReqSourceId awareness |
+| Q6 | Exploration quests — areatrigger travel, auto-completion |
+| Q8 | Quest log management — abandon grey quests, 15-min soft timeout |
+| Q11 | Class-based reward selection — STR/AGI/INT/STA weights per class |
+| Q12 | Configurable activity ratio — `RandomBot.QuestingPercent` in mangosd.conf |
+
+### Files Created (12 new files)
+```
+src/game/PlayerBots/IBotActivity.h
+src/game/PlayerBots/Activities/GrindingActivity.h/.cpp
+src/game/PlayerBots/Activities/QuestingActivity.h/.cpp
+src/game/PlayerBots/Utilities/BotQuestCache.h/.cpp
+src/game/PlayerBots/Utilities/BotObjectInteraction.h/.cpp
+```
+
+### Files Modified
+```
+src/game/PlayerBots/RandomBotAI.h/.cpp
+src/game/PlayerBots/Strategies/GrindingStrategy.h/.cpp
+src/game/PlayerBots/PlayerBotMgr.cpp
+src/game/CMakeLists.txt
+```
+
+### Key Features Working
+- Full quest lifecycle: accept → kill/collect → turn in → next quest in chain
+- Multi-quest overlap (kill targets from all active quests combined)
+- Quest giver cluster behavior (pick up all quests at a hub)
+- Faction-aware NPC filtering
+- Mob area relocation after 10s of no targets
+- Gameobject quest objectives with source item awareness
+- Configurable 70/30 questing/grinding ratio
+
+### Known Issues
+See `docs/Quest_Implementation/KNOWN_ISSUES.md` for full list. Key items:
+- GO item looting (Cactus Apples) — bot interacts but items don't enter inventory
+- Some bots bounce at quest givers with non-actionable quest types
+- Exploration quests, source items, GO objectives not yet confirmed in extended testing
 
 ---
 
@@ -299,10 +364,19 @@ GM command to diagnose stuck bots - shows bot state, target, movement, strategy.
 - Enter caves and buildings to reach mobs
 - React to being attacked (switch targets)
 - Learn new spells from class trainers at even levels
+- **Accept and complete quests autonomously (kill, collect, explore, GO interact)**
+- **Progress through quest chains automatically**
+- **Pick up multiple quests at hubs (cluster behavior)**
+- **Select class-appropriate quest rewards**
+- **Abandon grey and stale quests to manage quest log**
+- **Configurable questing vs grinding ratio**
 
 **Known Limitations:**
 - Same-map travel only (no boats/zeppelins/flight paths)
 - May path through dangerous areas
+- Gameobject item looting not fully working (Cactus Apple type quests)
+- "Talk to NPC" and item usage quests not implemented
+- No quest blacklist system yet
 
 ---
 
@@ -319,4 +393,4 @@ cd ~/Desktop/Forsaken_WOW/run/bin && ./mangosd  # Terminal 2
 
 ---
 
-*Last Updated: 2026-02-01 (Resting System Overhaul)*
+*Last Updated: 2026-03-15 (Questing System)*

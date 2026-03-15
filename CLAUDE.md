@@ -23,6 +23,9 @@
 | `docs/PROGRESS.md` | Recent session log (last 3-5 sessions) |
 | `docs/CURRENT_BUG.md` | Active bugs + future enhancements |
 | `docs/SYSTEM_REFERENCE.md` | Architecture, constants, thresholds, debugging |
+| `docs/Quest_Implementation/BRAINSTORM.md` | Questing system design decisions |
+| `docs/Quest_Implementation/IMPLEMENTATION_PLAN.md` | Phase status and build order |
+| `docs/Quest_Implementation/KNOWN_ISSUES.md` | Questing bugs, limitations, untested features |
 
 **Archive:** `docs/archive/` contains historical material (old sessions, fixed bugs, audits).
 
@@ -32,20 +35,31 @@
 
 ## Project Goal
 
-Autonomous RandomBot AI: auto-generate bots that grind, loot, rest, vendor, travel, train spells, and level up naturally.
+Autonomous RandomBot AI: auto-generate bots that grind, loot, rest, vendor, travel, train spells, quest, and level up naturally.
 
 ---
 
 ## Architecture
 
+Three-tier system: Survival (always runs) → Activity (weighted selection) → Behaviors (reusable)
+
 ```
 src/game/PlayerBots/
-├── RandomBotAI.h/cpp           ← Main brain, coordinates all systems
-├── BotMovementManager.h/cpp    ← Centralized movement (all strategies use this)
+├── RandomBotAI.h/cpp           ← Main brain, coordinates tiers
+├── IBotActivity.h              ← Activity interface (Tier 1)
+├── BotMovementManager.h/cpp    ← Centralized movement (all behaviors use this)
 ├── RandomBotGenerator.h/cpp    ← Auto-generation on first launch
 ├── PlayerBotMgr.h/cpp          ← Bot lifecycle management
-├── BotCheats.h/cpp             ← Resting (cheat regen, no consumables)
+├── BotCheats.h/cpp             ← Resting (spell-based regen)
 ├── DangerZoneCache.h/cpp       ← Danger zone cache (disabled, future use)
+│
+├── Activities/                 ← Tier 1: What is the bot doing? (one active at a time)
+│   ├── GrindingActivity.h/cpp ← Grinding + traveling coordinator
+│   └── QuestingActivity.h/cpp ← Quest lifecycle coordinator (10-state machine)
+│
+├── Utilities/                  ← Shared tools (any activity can use)
+│   ├── BotQuestCache.h/cpp    ← Quest giver/turn-in/item drop caches
+│   └── BotObjectInteraction.h/cpp ← Gameobject interaction
 │
 ├── Combat/
 │   ├── IClassCombat.h          ← Interface for class handlers
@@ -54,9 +68,9 @@ src/game/PlayerBots/
 │   └── Classes/                ← 9 class-specific handlers
 │       └── *Combat.h/cpp       ← Warrior, Mage, Hunter, etc.
 │
-└── Strategies/                 ← High-level behaviors (all use BotMovementManager)
-    ├── IBotStrategy.h          ← Strategy interface
-    ├── GrindingStrategy.h/cpp  ← Find and kill mobs
+└── Strategies/                 ← Tier 2: Reusable behaviors
+    ├── IBotStrategy.h          ← Strategy/behavior interface
+    ├── GrindingStrategy.h/cpp  ← Find and kill mobs (+ quest target filter)
     ├── LootingBehavior.h/cpp   ← Loot corpses after combat
     ├── GhostWalkingStrategy.h/cpp ← Death handling
     ├── VendoringStrategy.h/cpp ← Sell items, repair gear
@@ -101,4 +115,4 @@ If bots don't spawn: check `characters.playerbot` table. Empty table + generatio
 
 ---
 
-*Last Updated: 2026-01-31*
+*Last Updated: 2026-03-15*

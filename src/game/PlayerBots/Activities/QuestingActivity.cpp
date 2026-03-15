@@ -397,37 +397,57 @@ void QuestingActivity::HandleWorkingOnQuest(Player* pBot, uint32 diff)
 
     if (result == GrindingResult::NO_TARGETS)
     {
-        // No quest mobs nearby — find where they spawn and travel there
+        // No quest mobs nearby — find the CLOSEST spawn across ALL target entries
+        float bestDist = FLT_MAX;
+        float bestX = 0, bestY = 0, bestZ = 0;
+        uint32 bestEntry = 0;
+
         for (uint32 entry : killTargets)
         {
+            float spawnX, spawnY, spawnZ;
             if (BotQuestCache::FindCreatureSpawnLocation(entry, pBot->GetMapId(),
                     pBot->GetPositionX(), pBot->GetPositionY(),
-                    m_mobAreaX, m_mobAreaY, m_mobAreaZ))
+                    spawnX, spawnY, spawnZ))
             {
-                // Only travel if spawn is far away (> 75 yards = search range)
-                float dx = m_mobAreaX - pBot->GetPositionX();
-                float dy = m_mobAreaY - pBot->GetPositionY();
-                float distToSpawn = std::sqrt(dx * dx + dy * dy);
+                float dx = spawnX - pBot->GetPositionX();
+                float dy = spawnY - pBot->GetPositionY();
+                float dist = std::sqrt(dx * dx + dy * dy);
 
-                if (distToSpawn > 75.0f)
+                if (dist < bestDist)
                 {
-                    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
-                        "[QuestingActivity] %s traveling to quest mob area (entry %u) at (%.1f, %.1f, %.1f)",
-                        pBot->GetName(), entry, m_mobAreaX, m_mobAreaY, m_mobAreaZ);
-
-                    if (m_pMovementMgr)
-                        m_pMovementMgr->MoveTo(m_mobAreaX, m_mobAreaY, m_mobAreaZ,
-                                                MovementPriority::PRIORITY_NORMAL);
-
-                    m_travelingToMobArea = true;
-                    m_stuckTimer = 0;
-                    m_lastDistanceCheckTime = 0;
-                    m_lastDistanceToTarget = FLT_MAX;
-                    return;
+                    bestDist = dist;
+                    bestX = spawnX;
+                    bestY = spawnY;
+                    bestZ = spawnZ;
+                    bestEntry = entry;
                 }
-                // Spawn is close but no mobs found — they might be dead, keep scanning
+            }
+        }
+
+        if (bestEntry != 0)
+        {
+            if (bestDist > 75.0f)
+            {
+                m_mobAreaX = bestX;
+                m_mobAreaY = bestY;
+                m_mobAreaZ = bestZ;
+
+                sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                    "[QuestingActivity] %s traveling to quest mob area (entry %u) at (%.1f, %.1f, %.1f) dist %.0f",
+                    pBot->GetName(), bestEntry, m_mobAreaX, m_mobAreaY, m_mobAreaZ, bestDist);
+
+                if (m_pMovementMgr)
+                    m_pMovementMgr->MoveTo(m_mobAreaX, m_mobAreaY, m_mobAreaZ,
+                                            MovementPriority::PRIORITY_NORMAL);
+
+                m_travelingToMobArea = true;
+                m_stuckTimer = 0;
+                m_lastDistanceCheckTime = 0;
+                m_lastDistanceToTarget = FLT_MAX;
                 return;
             }
+            // Spawn is close but no mobs found — they might be dead, keep scanning
+            return;
         }
 
         // Couldn't find spawn location — go back to selecting
@@ -801,8 +821,19 @@ bool QuestingActivity::TurnInQuest(Player* pBot, Creature* pNPC, uint32 questId)
 }
 
 // ============================================================================
-// Kill Quest Helpers
+// Quest Objective Helpers
 // ============================================================================
+
+// Helper to add a creature entry to target list without duplicates
+static void AddTargetEntry(std::vector<uint32>& targets, uint32 entry)
+{
+    for (uint32 existing : targets)
+    {
+        if (existing == entry)
+            return;
+    }
+    targets.push_back(entry);
+}
 
 std::vector<uint32> QuestingActivity::BuildKillTargetList(Player* pBot) const
 {
@@ -822,7 +853,9 @@ std::vector<uint32> QuestingActivity::BuildKillTargetList(Player* pBot) const
         if (!pQuest)
             continue;
 
-        // Check ReqCreatureOrGOId1-4 for kill objectives (positive = creature entry)
+        QuestStatusData const* statusData = pBot->GetQuestStatusData(questId);
+
+        // --- Kill objectives: ReqCreatureOrGOId1-4 (positive = creature entry) ---
         for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
         {
             int32 reqId = pQuest->ReqCreatureOrGOId[i];
@@ -833,26 +866,36 @@ std::vector<uint32> QuestingActivity::BuildKillTargetList(Player* pBot) const
             if (reqCount == 0)
                 continue;
 
-            // Check if this objective is already complete
-            // QuestStatusData tracks per-objective progress
-            QuestStatusData const* statusData = pBot->GetQuestStatusData(questId);
             if (statusData && statusData->m_creatureOrGOcount[i] >= reqCount)
                 continue;  // Already met this objective
 
-            uint32 creatureEntry = static_cast<uint32>(reqId);
+            AddTargetEntry(targets, static_cast<uint32>(reqId));
+        }
 
-            // Avoid duplicates
-            bool alreadyAdded = false;
-            for (uint32 existing : targets)
-            {
-                if (existing == creatureEntry)
-                {
-                    alreadyAdded = true;
-                    break;
-                }
-            }
-            if (!alreadyAdded)
-                targets.push_back(creatureEntry);
+        // --- Collect objectives: ReqItemId1-4 (items that drop from mobs) ---
+        for (int i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
+        {
+            uint32 itemId = pQuest->ReqItemId[i];
+            if (itemId == 0)
+                continue;
+
+            uint32 reqCount = pQuest->ReqItemCount[i];
+            if (reqCount == 0)
+                continue;
+
+            // Check if already have enough items
+            uint32 currentCount = pBot->GetItemCount(itemId);
+            if (currentCount >= reqCount)
+                continue;
+
+            // Look up which creatures drop this item (from startup cache)
+            std::vector<uint32> const* dropSources = BotQuestCache::GetCreaturesDropping(itemId);
+            if (!dropSources || dropSources->empty())
+                continue;  // Item doesn't drop from any creature (might be from objects)
+
+            // Add all creatures that drop this item to the target list
+            for (uint32 creatureEntry : *dropSources)
+                AddTargetEntry(targets, creatureEntry);
         }
     }
 
@@ -869,22 +912,26 @@ void QuestingActivity::UpdateQuestCompletion(Player* pBot)
 
         if (pBot->GetQuestStatus(questId) == QUEST_STATUS_INCOMPLETE)
         {
-            // Log kill progress changes
             Quest const* pQuest = sObjectMgr.GetQuestTemplate(questId);
             QuestStatusData const* statusData = pBot->GetQuestStatusData(questId);
             if (pQuest && statusData)
             {
-                // Sum total kills across all objectives for this quest
-                uint32 totalKills = 0;
+                // Sum total progress across kill + item objectives
+                uint32 totalProgress = 0;
                 for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
-                    totalKills += statusData->m_creatureOrGOcount[i];
+                    totalProgress += statusData->m_creatureOrGOcount[i];
+                for (int i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
+                {
+                    if (pQuest->ReqItemId[i] != 0)
+                        totalProgress += pBot->GetItemCount(pQuest->ReqItemId[i]);
+                }
 
                 uint32& lastKnown = m_lastKnownKillCounts[questId];
-                if (totalKills > lastKnown)
+                if (totalProgress > lastKnown)
                 {
-                    lastKnown = totalKills;
+                    lastKnown = totalProgress;
 
-                    // Log per-objective progress
+                    // Log kill objective progress
                     for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
                     {
                         int32 reqId = pQuest->ReqCreatureOrGOId[i];
@@ -892,9 +939,24 @@ void QuestingActivity::UpdateQuestCompletion(Player* pBot)
                         if (reqId > 0 && reqCount > 0)
                         {
                             sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
-                                "[QuestingActivity] %s [%u] %s: %u/%u (entry %u)",
+                                "[QuestingActivity] %s [%u] %s: kill %u/%u (entry %u)",
                                 pBot->GetName(), questId, pQuest->GetTitle().c_str(),
                                 statusData->m_creatureOrGOcount[i], reqCount, (uint32)reqId);
+                        }
+                    }
+
+                    // Log item collection progress
+                    for (int i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
+                    {
+                        uint32 itemId = pQuest->ReqItemId[i];
+                        uint32 reqCount = pQuest->ReqItemCount[i];
+                        if (itemId != 0 && reqCount > 0)
+                        {
+                            uint32 current = pBot->GetItemCount(itemId);
+                            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                                "[QuestingActivity] %s [%u] %s: item %u/%u (itemId %u)",
+                                pBot->GetName(), questId, pQuest->GetTitle().c_str(),
+                                current, reqCount, itemId);
                         }
                     }
                 }

@@ -109,6 +109,12 @@ public:
                                              float botX, float botY,
                                              float& outX, float& outY, float& outZ);
 
+    // ---- Areatrigger lookup (for exploration quests) ----
+
+    // Find areatrigger coordinates for a quest. Returns false if not found.
+    static bool FindQuestAreaTrigger(uint32 questId, uint32 mapId,
+                                      float& outX, float& outY, float& outZ);
+
     // ---- O(1) "is this NPC a quest giver?" checks ----
 
     static bool IsQuestGiverCreature(uint32 creatureEntry);

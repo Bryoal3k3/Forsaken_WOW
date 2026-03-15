@@ -312,6 +312,37 @@ void QuestingActivity::HandleSelectingQuest(Player* pBot)
         return;
     }
 
+    // Check for exploration quests
+    uint32 exploreQuestId = FindExplorationQuest(pBot);
+    if (exploreQuestId != 0)
+    {
+        if (BotQuestCache::FindQuestAreaTrigger(exploreQuestId, pBot->GetMapId(),
+                m_exploreTargetX, m_exploreTargetY, m_exploreTargetZ))
+        {
+            m_exploreQuestId = exploreQuestId;
+            m_travelingToExploreTarget = true;
+            m_travelingToMobArea = false;
+            m_travelingToGameObject = false;
+            m_stuckTimer = 0;
+            m_lastDistanceCheckTime = 0;
+            m_lastDistanceToTarget = FLT_MAX;
+
+            Quest const* pQuest = sObjectMgr.GetQuestTemplate(exploreQuestId);
+            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                "[QuestingActivity] %s traveling to explore area for [%u] %s at (%.1f, %.1f, %.1f)",
+                pBot->GetName(), exploreQuestId,
+                pQuest ? pQuest->GetTitle().c_str() : "unknown",
+                m_exploreTargetX, m_exploreTargetY, m_exploreTargetZ);
+
+            if (m_pMovementMgr)
+                m_pMovementMgr->MoveTo(m_exploreTargetX, m_exploreTargetY, m_exploreTargetZ,
+                                        MovementPriority::PRIORITY_NORMAL);
+
+            m_state = QuestActivityState::WORKING_ON_QUEST;
+            return;
+        }
+    }
+
     // No actionable objectives at all — if bot has no quests, try finding a quest giver
     // If bot HAS quests but can't work on them, fall back to grinding (don't bounce)
     if (!HasIncompleteQuests(pBot) && GetFreeQuestSlots(pBot) > 5)
@@ -385,6 +416,54 @@ void QuestingActivity::HandleWorkingOnQuest(Player* pBot, uint32 diff)
         if (m_stuckTimer >= STUCK_TIMEOUT_MS)
         {
             m_travelingToGameObject = false;
+            m_state = QuestActivityState::SELECTING_QUEST;
+        }
+        return;
+    }
+
+    // Handle exploration quest travel
+    if (m_travelingToExploreTarget && m_exploreQuestId != 0)
+    {
+        // Check if quest completed (areatrigger fires automatically on arrival)
+        if (pBot->GetQuestStatus(m_exploreQuestId) == QUEST_STATUS_COMPLETE)
+        {
+            sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                "[QuestingActivity] %s exploration quest %u complete!",
+                pBot->GetName(), m_exploreQuestId);
+            m_travelingToExploreTarget = false;
+            m_exploreQuestId = 0;
+            m_state = QuestActivityState::CHECKING_QUEST_LOG;
+            return;
+        }
+
+        float dist = pBot->GetDistance(m_exploreTargetX, m_exploreTargetY, m_exploreTargetZ);
+        if (dist <= 5.0f)
+        {
+            // Arrived but quest not complete yet — areatrigger might have a larger radius
+            // Wait a tick, completion should fire from the server side
+            m_travelingToExploreTarget = false;
+            m_exploreQuestId = 0;
+            return;
+        }
+
+        // Stuck detection
+        m_stuckTimer += diff;
+        m_lastDistanceCheckTime += diff;
+        if (m_lastDistanceCheckTime >= DISTANCE_CHECK_INTERVAL_MS)
+        {
+            if (std::abs(dist - m_lastDistanceToTarget) < 1.0f)
+            {
+                if (m_pMovementMgr)
+                    m_pMovementMgr->MoveTo(m_exploreTargetX, m_exploreTargetY, m_exploreTargetZ,
+                                            MovementPriority::PRIORITY_NORMAL);
+            }
+            m_lastDistanceToTarget = dist;
+            m_lastDistanceCheckTime = 0;
+        }
+        if (m_stuckTimer >= STUCK_TIMEOUT_MS)
+        {
+            m_travelingToExploreTarget = false;
+            m_exploreQuestId = 0;
             m_state = QuestActivityState::SELECTING_QUEST;
         }
         return;
@@ -1180,5 +1259,48 @@ bool QuestingActivity::TryInteractWithQuestObjects(Player* pBot)
     }
 
     return false;
+}
+
+// ============================================================================
+// Exploration Quest Helpers
+// ============================================================================
+
+uint32 QuestingActivity::FindExplorationQuest(Player* pBot) const
+{
+    for (uint16 slot = 0; slot < MAX_QUEST_LOG_SIZE; ++slot)
+    {
+        uint32 questId = pBot->GetUInt32Value(PLAYER_QUEST_LOG_1_1 + slot * MAX_QUEST_OFFSET + QUEST_ID_OFFSET);
+        if (questId == 0)
+            continue;
+
+        if (pBot->GetQuestStatus(questId) != QUEST_STATUS_INCOMPLETE)
+            continue;
+
+        Quest const* pQuest = sObjectMgr.GetQuestTemplate(questId);
+        if (!pQuest)
+            continue;
+
+        if (pQuest->HasSpecialFlag(QUEST_SPECIAL_FLAG_EXPLORATION_OR_EVENT))
+        {
+            // Check it has no kill/collect objectives (pure exploration)
+            bool hasOtherObjectives = false;
+            for (int i = 0; i < QUEST_OBJECTIVES_COUNT; ++i)
+            {
+                if (pQuest->ReqCreatureOrGOId[i] != 0)
+                    hasOtherObjectives = true;
+            }
+            for (int i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
+            {
+                if (pQuest->ReqItemId[i] != 0)
+                    hasOtherObjectives = true;
+            }
+
+            // If it has other objectives, let the kill/collect handlers deal with it
+            // Only handle pure exploration quests here
+            if (!hasOtherObjectives)
+                return questId;
+        }
+    }
+    return 0;
 }
 

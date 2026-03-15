@@ -108,6 +108,8 @@ private:
     void UpdateQuestCompletion(Player* pBot);
     // Try to interact with nearby quest gameobjects
     bool TryInteractWithQuestObjects(Player* pBot);
+    // Find an exploration quest the bot can work on (returns questId, 0 if none)
+    uint32 FindExplorationQuest(Player* pBot) const;
 
     // ---- State ----
     QuestActivityState m_state = QuestActivityState::CHECKING_QUEST_LOG;
@@ -132,6 +134,11 @@ private:
     float m_goTargetX = 0.0f, m_goTargetY = 0.0f, m_goTargetZ = 0.0f;
     uint32 m_goTargetEntry = 0;
     bool m_travelingToGameObject = false;
+
+    // Exploration quest working state
+    float m_exploreTargetX = 0.0f, m_exploreTargetY = 0.0f, m_exploreTargetZ = 0.0f;
+    uint32 m_exploreQuestId = 0;
+    bool m_travelingToExploreTarget = false;
 
     // Track last known kill counts for progress logging (questId -> total kills)
     std::unordered_map<uint32, uint32> m_lastKnownKillCounts;

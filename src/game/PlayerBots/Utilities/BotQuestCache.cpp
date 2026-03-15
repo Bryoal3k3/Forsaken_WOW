@@ -663,6 +663,31 @@ bool BotQuestCache::FindGameObjectSpawnLocation(uint32 goEntry, uint32 mapId,
 }
 
 // ============================================================================
+// Areatrigger Lookup
+// ============================================================================
+
+bool BotQuestCache::FindQuestAreaTrigger(uint32 questId, uint32 mapId,
+                                          float& outX, float& outY, float& outZ)
+{
+    // Query areatrigger_involvedrelation + areatrigger_template
+    // Runs rarely (only for exploration quests), so SQL is acceptable
+    std::unique_ptr<QueryResult> result(WorldDatabase.PQuery(
+        "SELECT at.x, at.y, at.z, at.map_id FROM areatrigger_template at "
+        "JOIN areatrigger_involvedrelation ai ON at.id = ai.id "
+        "WHERE ai.quest = %u AND at.map_id = %u LIMIT 1",
+        questId, mapId));
+
+    if (!result)
+        return false;
+
+    Field* fields = result->Fetch();
+    outX = fields[0].GetFloat();
+    outY = fields[1].GetFloat();
+    outZ = fields[2].GetFloat();
+    return true;
+}
+
+// ============================================================================
 // O(1) Quest Giver Checks
 // ============================================================================
 

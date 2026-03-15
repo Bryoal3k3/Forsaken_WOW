@@ -403,6 +403,7 @@ void VendoringStrategy::SellAllItems(Player* pBot, Creature* vendor)
 
     uint32 totalSold = 0;
     uint32 totalMoney = 0;
+    ObjectGuid vendorGuid = vendor->GetObjectGuid();
 
     // Sell items from backpack
     for (int i = INVENTORY_SLOT_ITEM_START; i < INVENTORY_SLOT_ITEM_END; ++i)
@@ -418,8 +419,15 @@ void VendoringStrategy::SellAllItems(Player* pBot, Creature* vendor)
         uint32 count = pItem->GetCount();
         uint32 money = proto->SellPrice * count;
 
-        // Remove item and give money
+        // Replicate real sell handler (HandleSellItemOpcode) exactly:
+        // 1. Update quest item tracking
+        // 2. Remove from inventory slot
+        // 3. Clean stale entries from item update queue (fixes _SaveInventory null pointer)
+        // 4. Move to buyback slot (handles item lifecycle)
+        pBot->ItemRemovedQuestCheck(pItem->GetEntry(), count);
         pBot->RemoveItem(INVENTORY_SLOT_BAG_0, i, true);
+        pItem->RemoveFromUpdateQueueOf(pBot);
+        pBot->AddItemToBuyBackSlot(pItem, money, vendorGuid);
         pBot->ModifyMoney(money);
 
         totalSold++;
@@ -446,8 +454,10 @@ void VendoringStrategy::SellAllItems(Player* pBot, Creature* vendor)
             uint32 count = pItem->GetCount();
             uint32 money = proto->SellPrice * count;
 
-            // Remove item and give money
+            pBot->ItemRemovedQuestCheck(pItem->GetEntry(), count);
             pBot->RemoveItem(bag, slot, true);
+            pItem->RemoveFromUpdateQueueOf(pBot);
+            pBot->AddItemToBuyBackSlot(pItem, money, vendorGuid);
             pBot->ModifyMoney(money);
 
             totalSold++;
@@ -472,20 +482,13 @@ void VendoringStrategy::RepairAllGear(Player* pBot, Creature* vendor)
     if (!pBot || !vendor)
         return;
 
-    if (!vendor->IsArmorer())
-        return; // Can't repair at this vendor
+    // Free repair for bots (consistent with free spell training)
+    // Using cost=false skips the money check that was silently failing
+    // and causing the infinite vendor loop when bots couldn't afford repairs
+    pBot->DurabilityRepairAll(false, 0.0f);
 
-    // Get reputation discount
-    float discount = pBot->GetReputationPriceDiscount(vendor);
-
-    // Repair all items
-    uint32 totalCost = pBot->DurabilityRepairAll(true, discount);
-
-    if (totalCost > 0)
-    {
-        sLog.Out(LOG_BASIC, LOG_LVL_DEBUG, "[VendoringStrategy] Bot %s repaired all gear for %u copper",
-                 pBot->GetName(), totalCost);
-    }
+    sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL, "[VendoringStrategy] Bot %s repaired all gear",
+             pBot->GetName());
 }
 
 bool VendoringStrategy::DoVendorBusiness(Player* pBot)

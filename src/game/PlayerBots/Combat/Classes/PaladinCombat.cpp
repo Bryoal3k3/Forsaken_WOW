@@ -29,8 +29,20 @@ void PaladinCombat::UpdateCombat(Player* pBot, Unit* pVictim)
     // Ensure we keep chasing if not in melee range (handles movement interruptions)
     CombatHelpers::HandleMeleeMovement(pBot, pVictim, m_pMoveMgr);
 
-    // Judgement
+    // Re-apply Seal if consumed by Judgement — must happen before Judgement
+    // so there's always a Seal active for the next Judgement to consume
+    if (m_pAI->m_spells.paladin.pSeal &&
+        !pBot->HasAura(m_pAI->m_spells.paladin.pSeal->Id) &&
+        m_pAI->CanTryToCastSpell(pBot, m_pAI->m_spells.paladin.pSeal))
+    {
+        if (m_pAI->DoCastSpell(pBot, m_pAI->m_spells.paladin.pSeal) == SPELL_CAST_OK)
+            return;
+    }
+
+    // Judgement — requires an active Seal (Judgement consumes it)
     if (m_pAI->m_spells.paladin.pJudgement &&
+        m_pAI->m_spells.paladin.pSeal &&
+        pBot->HasAura(m_pAI->m_spells.paladin.pSeal->Id) &&
         m_pAI->CanTryToCastSpell(pVictim, m_pAI->m_spells.paladin.pJudgement))
     {
         if (m_pAI->DoCastSpell(pVictim, m_pAI->m_spells.paladin.pJudgement) == SPELL_CAST_OK)

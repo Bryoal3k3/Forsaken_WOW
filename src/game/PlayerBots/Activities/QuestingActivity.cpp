@@ -201,13 +201,32 @@ void QuestingActivity::HandleCheckingQuestLog(Player* pBot)
 
 void QuestingActivity::HandleFindingQuestGiver(Player* pBot)
 {
-    m_targetGiver = BotQuestCache::FindNearestQuestGiver(pBot);
+    // Clear exhausted givers on level-up (new quests may be available)
+    uint32 currentLevel = pBot->GetLevel();
+    if (m_lastKnownLevel != 0 && currentLevel > m_lastKnownLevel)
+    {
+        m_exhaustedGiverEntries.clear();
+        m_exhaustedGiverTimestamp = 0;
+    }
+    m_lastKnownLevel = currentLevel;
+
+    // Clear exhausted givers after cooldown expires
+    if (m_exhaustedGiverTimestamp != 0 &&
+        WorldTimer::getMSTimeDiff(m_exhaustedGiverTimestamp, WorldTimer::getMSTime()) >= GIVER_EXHAUSTED_COOLDOWN_MS)
+    {
+        m_exhaustedGiverEntries.clear();
+        m_exhaustedGiverTimestamp = 0;
+    }
+
+    // Skip givers we've already visited that had nothing to offer
+    m_targetGiver = BotQuestCache::FindNearestQuestGiver(pBot,
+        m_exhaustedGiverEntries.empty() ? nullptr : &m_exhaustedGiverEntries);
 
     if (!m_targetGiver)
     {
         sLog.Out(LOG_BASIC, LOG_LVL_DETAIL,
-            "[QuestingActivity] %s could not find any quest giver on map %u",
-            pBot->GetName(), pBot->GetMapId());
+            "[QuestingActivity] %s could not find any quest giver on map %u (%zu exhausted)",
+            pBot->GetName(), pBot->GetMapId(), m_exhaustedGiverEntries.size());
         m_state = QuestActivityState::NO_QUESTS_AVAILABLE;
         return;
     }
@@ -279,7 +298,20 @@ void QuestingActivity::HandleTravelingToGiver(Player* pBot, uint32 diff)
 void QuestingActivity::HandleAtGiverPickingUp(Player* pBot)
 {
     // Accept quests from this quest giver and nearby ones (cluster behavior)
-    AcceptAvailableQuestsFromCluster(pBot);
+    uint32 accepted = AcceptAvailableQuestsFromCluster(pBot);
+
+    // If nothing was accepted, mark this giver as exhausted so we don't bounce back
+    if (accepted == 0 && m_targetGiver)
+    {
+        m_exhaustedGiverEntries.insert(m_targetGiver->sourceEntry);
+
+        if (m_exhaustedGiverTimestamp == 0)
+            m_exhaustedGiverTimestamp = WorldTimer::getMSTime();
+
+        sLog.Out(LOG_BASIC, LOG_LVL_DETAIL,
+            "[QuestingActivity] %s: quest giver (entry %u) had no quests, marking exhausted",
+            pBot->GetName(), m_targetGiver->sourceEntry);
+    }
 
     // Move on to selecting a quest to work on
     m_targetGiver = nullptr;
@@ -504,18 +536,18 @@ void QuestingActivity::HandleWorkingOnQuest(Player* pBot, uint32 diff)
             // Arrived at gameobject location — try to interact/loot
             m_travelingToGameObject = false;
             GameObject* pGo = BotObjectInteraction::FindNearbyObject(pBot, m_goTargetEntry, 15.0f);
-            if (pGo)
+            if (pGo && BotObjectInteraction::CanInteractWith(pBot, pGo))
             {
                 BotObjectInteraction::LootObject(pBot, pGo);
                 sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
-                    "[QuestingActivity] %s interacted with quest object %s (entry %u)",
+                    "[QuestingActivity] %s looted quest object %s (entry %u)",
                     pBot->GetName(), pGo->GetGOInfo()->name.c_str(), m_goTargetEntry);
             }
             else
             {
-                // GO not here (despawned) — force relocate to a different spawn immediately
-                sLog.Out(LOG_BASIC, LOG_LVL_DETAIL,
-                    "[QuestingActivity] %s: GO entry %u not found at destination, relocating",
+                // GO not found, despawned, or not interactable — relocate to a different spawn
+                sLog.Out(LOG_BASIC, LOG_LVL_MINIMAL,
+                    "[QuestingActivity] %s: GO entry %u not interactable at destination, relocating",
                     pBot->GetName(), m_goTargetEntry);
                 m_goNoProgressTimer = GO_RELOCATE_MS;  // Trigger relocate in SelectingQuest
                 m_state = QuestActivityState::SELECTING_QUEST;
@@ -994,12 +1026,10 @@ Creature* QuestingActivity::FindNearbyQuestNPC(Player* pBot, uint32 entry, float
     return found;
 }
 
-void QuestingActivity::AcceptAvailableQuests(Player* pBot, Creature* pNPC)
+void QuestingActivity::AcceptAvailableQuests(Player* pBot, Creature* pNPC, uint32& acceptedCount)
 {
     if (!pBot || !pNPC)
         return;
-
-    uint32 acceptedCount = 0;
 
     // Iterate all quests this NPC offers
     QuestRelationsMapBounds bounds = sObjectMgr.GetCreatureQuestRelationsMapBounds(pNPC->GetEntry());
@@ -1045,17 +1075,19 @@ void QuestingActivity::AcceptAvailableQuests(Player* pBot, Creature* pNPC)
     }
 }
 
-void QuestingActivity::AcceptAvailableQuestsFromCluster(Player* pBot)
+uint32 QuestingActivity::AcceptAvailableQuestsFromCluster(Player* pBot)
 {
+    uint32 totalAccepted = 0;
+
     if (!pBot || !m_targetGiver)
-        return;
+        return totalAccepted;
 
     // First, accept from the primary target
     if (!m_targetGiver->isGameObject)
     {
         Creature* pNPC = FindNearbyQuestNPC(pBot, m_targetGiver->sourceEntry);
         if (pNPC)
-            AcceptAvailableQuests(pBot, pNPC);
+            AcceptAvailableQuests(pBot, pNPC, totalAccepted);
     }
 
     // Then check for other quest givers in the cluster radius
@@ -1083,8 +1115,10 @@ void QuestingActivity::AcceptAvailableQuestsFromCluster(Player* pBot)
 
         Creature* pNPC = FindNearbyQuestNPC(pBot, pGiver->sourceEntry, CLUSTER_RADIUS);
         if (pNPC)
-            AcceptAvailableQuests(pBot, pNPC);
+            AcceptAvailableQuests(pBot, pNPC, totalAccepted);
     }
+
+    return totalAccepted;
 }
 
 bool QuestingActivity::TurnInQuest(Player* pBot, Creature* pNPC, uint32 questId)

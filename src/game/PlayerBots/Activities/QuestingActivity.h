@@ -95,8 +95,8 @@ private:
 
     // ---- NPC interaction ----
     Creature* FindNearbyQuestNPC(Player* pBot, uint32 entry, float range = 30.0f) const;
-    void AcceptAvailableQuests(Player* pBot, Creature* pNPC);
-    void AcceptAvailableQuestsFromCluster(Player* pBot);
+    void AcceptAvailableQuests(Player* pBot, Creature* pNPC, uint32& acceptedCount);
+    uint32 AcceptAvailableQuestsFromCluster(Player* pBot);
     bool TurnInQuest(Player* pBot, Creature* pNPC, uint32 questId);
 
     // ---- Quest objective helpers ----
@@ -173,6 +173,13 @@ private:
     // NO_QUESTS_AVAILABLE re-check timer
     uint32 m_noQuestsTimer = 0;
     static constexpr uint32 NO_QUESTS_RECHECK_MS = 30000;  // Re-check every 30 sec
+
+    // Exhausted quest givers — visited but offered nothing. Entries are skipped
+    // in subsequent searches. Cleared on level-up or after cooldown expires.
+    std::unordered_set<uint32> m_exhaustedGiverEntries;
+    uint32 m_lastKnownLevel = 0;  // Detect level-ups to clear exhausted set
+    static constexpr uint32 GIVER_EXHAUSTED_COOLDOWN_MS = 300000;  // 5 min
+    uint32 m_exhaustedGiverTimestamp = 0;  // When the first giver was exhausted
 
     // Constants
     static constexpr float NPC_INTERACT_RANGE = 5.0f;

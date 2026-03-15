@@ -76,7 +76,8 @@ public:
     // Find nearest quest giver(s) with quests potentially available for this bot.
     // Uses map partition + pre-filters (level/class/race/faction).
     // Returns nullptr if nothing found on bot's map.
-    static QuestGiverInfo const* FindNearestQuestGiver(Player* pBot);
+    static QuestGiverInfo const* FindNearestQuestGiver(Player* pBot,
+        std::unordered_set<uint32> const* skipEntries = nullptr);
 
     // Find all quest givers within cluster radius of a point (for multi-pickup).
     // Returns givers within ~100 yards of the given position on the same map.

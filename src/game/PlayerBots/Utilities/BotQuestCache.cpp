@@ -495,7 +495,8 @@ void BotQuestCache::BuildItemDropCache()
 // Quest Giver Lookups
 // ============================================================================
 
-QuestGiverInfo const* BotQuestCache::FindNearestQuestGiver(Player* pBot)
+QuestGiverInfo const* BotQuestCache::FindNearestQuestGiver(Player* pBot,
+    std::unordered_set<uint32> const* skipEntries)
 {
     if (!pBot || !s_giverCacheBuilt)
         return nullptr;
@@ -516,6 +517,10 @@ QuestGiverInfo const* BotQuestCache::FindNearestQuestGiver(Player* pBot)
 
     for (QuestGiverInfo const& giver : mapIt->second)
     {
+        // Skip exhausted givers the caller has already visited
+        if (skipEntries && skipEntries->count(giver.sourceEntry))
+            continue;
+
         // Pre-filter: level range (bot level must be >= minQuestLevel, with some margin)
         // Allow quests up to 4 levels above current quest level range
         if (botLevel + 4 < giver.minQuestLevel)

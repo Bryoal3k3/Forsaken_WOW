@@ -1,6 +1,6 @@
 # Current Bug Tracker
 
-## Status: 1 Low-Priority Bug Remaining
+## Status: 3 Active Bugs
 
 For fixed bug history, see `docs/archive/BUG_HISTORY.md`
 
@@ -37,6 +37,54 @@ ERROR: Player::AddCooldown> Spell(75) try to add and already existing cooldown?
 
 ---
 
+## Bug #19: Paladin Judgement Casts Spell ID 0
+
+**Status**: ACTIVE (Medium Priority)
+
+**Symptom**: Console error every time a Paladin bot casts Judgement:
+```
+ERROR: CastSpell: unknown spell id 0 by caster: Player Stor (Guid: 80).
+```
+
+**Root Cause**:
+In vanilla WoW, Judgement **consumes** the active Seal. After Judgement fires, the Paladin has no Seal active. `PaladinCombat::UpdateOutOfCombat()` re-applies the Seal, but this only runs when out of combat. During combat, `UpdateCombat()` runs instead, and there's no Seal re-application after Judgement consumes it. The consumed Seal's spell pointer likely becomes invalid (spell ID 0), and subsequent code tries to reference it.
+
+**Impact**:
+- Console error spam (one per Judgement cast)
+- Paladin loses Seal passive benefit (e.g., Seal of Righteousness extra holy damage) for remainder of fight
+- DPS loss for Paladin bots
+
+**Fix**:
+Add Seal re-application inside `PaladinCombat::UpdateCombat()` after the Judgement cast, or check if Seal is active before casting Judgement-related follow-ups.
+
+**Related Code**:
+- `Combat/Classes/PaladinCombat.cpp` - Paladin combat handler
+- `UpdateCombat()` line 33-37 - Judgement cast
+- `UpdateOutOfCombat()` line 76-81 - Seal application (only runs out of combat)
+
+---
+
+## Bug #20: Server Auto-Restart from Honor System
+
+**Status**: RESOLVED (Config Fix)
+
+**Symptom**: Server shuts down after ~15 minutes of runtime with no crash or error. Last console output shows normal bot activity then `Shutting down world...`
+
+**Root Cause**:
+`AutoHonorRestart = 1` in `mangosd.conf` causes the Honor system (`HonorMgr.cpp:589`) to call `ShutdownServ(900, ...)` on startup when honor rank recalculation is needed. This sets a 15-minute countdown timer that gracefully shuts down the server when it expires. It's not a crash -- it's an intentional scheduled restart.
+
+**Fix Applied**:
+Set `AutoHonorRestart = 0` in `mangosd.conf`. Server now runs indefinitely.
+
+**Investigation Notes**:
+- ASAN showed only shutdown-time leaks, no crash reports (because it wasn't a crash)
+- Anticrash handler (set to 28) was initially suspected of swallowing SIGSEGV, temporarily set to 0
+- GDB confirmed no signals were raised -- `World::StopNow` breakpoint was never hit
+- Shutdown went through `ShutdownServ` timer path which sets `m_stopEvent = true` directly in `World::Update()`
+- `MaxCoreStuckTime = 0` (disabled), no OOM in dmesg
+
+---
+
 ## Future Enhancements (Not Bugs)
 
 ### Console Timestamps
@@ -65,4 +113,4 @@ When a new bug is discovered:
 
 ---
 
-*Last Updated: 2026-01-31*
+*Last Updated: 2026-03-14*

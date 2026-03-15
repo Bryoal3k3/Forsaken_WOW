@@ -161,7 +161,8 @@ UpdateAI(diff)
 |               +-- Enable looting mode for next tick
 |
 +-- [RESTING?] --> BotCheats::HandleResting()
-|               +-- Sit and regen 5% HP/mana per 2 sec
+|               +-- Cast food spell (24005) - 2% max HP per tick
+|               +-- Cast drink spell (24355) - 2% max mana per tick
 |               +-- Stand up when HP >= 90% AND mana >= 90%
 |               RETURN
 |
@@ -186,7 +187,7 @@ UpdateAI(diff)
 | Priority | Strategy | Trigger Condition |
 |----------|----------|-------------------|
 | 1 | **GhostWalking** | Bot is dead |
-| 2 | **Resting** | HP < 35% OR mana < 45% |
+| 2 | **Resting** | HP < 50% OR mana < 40% |
 | 3 | **Combat** | In combat OR has attack victim |
 | 4 | **Looting** | Combat just ended, lootable corpses nearby |
 | 5 | **Training** | Even level reached, new spells available |
@@ -202,11 +203,11 @@ UpdateAI(diff)
 ### Resting (BotCheats.h)
 | Constant | Value | Purpose |
 |----------|-------|---------|
-| `RESTING_HP_START_THRESHOLD` | 35% | Start resting below this HP |
-| `RESTING_MANA_START_THRESHOLD` | 45% | Start resting below this mana |
+| `RESTING_HP_START_THRESHOLD` | 50% | Start eating below this HP |
+| `RESTING_MANA_START_THRESHOLD` | 40% | Start drinking below this mana |
 | `RESTING_STOP_THRESHOLD` | 90% | Stop resting above this |
-| `RESTING_REGEN_PERCENT` | 5% | Regen per tick |
-| `RESTING_TICK_INTERVAL` | 2000ms | Time between regen ticks |
+| `SPELL_FOOD` | 24005 | Food spell (2% max HP per tick) |
+| `SPELL_DRINK` | 24355 | Drink spell (2% max mana per tick) |
 
 ### Grinding (GrindingStrategy.h)
 | Constant | Value | Purpose |
@@ -298,7 +299,7 @@ Moving: NO | Casting: NO
 | Symptom | Likely Cause |
 |---------|--------------|
 | Bot stands idle | No mobs in range, backoff active, or travel not triggering |
-| Bot keeps sitting | Resting threshold not met (check HP/mana %) |
+| Bot keeps sitting | HP < 90% or mana < 90% (check buff icons) |
 | Bot won't vendor | Bags not 100% full, gear not broken |
 | Bot stuck traveling | BotMovementManager detects in 5 sec |
 | `startPoly=0` errors | Bot at invalid position (falling through floor) |
@@ -328,6 +329,15 @@ Links character GUID to AI type.
 
 ---
 
+## Reference Documents
+
+| Doc | Purpose |
+|-----|---------|
+| `docs/CMANGOS_COMPARISON_REPORT.md` | Feature comparison vs cMangos PlayerBots, architecture analysis, scalability notes, roadmap |
+| `docs/Quest_Implementation/BRAINSTORM.md` | Questing system design (revised 2026-02-09) |
+
+---
+
 ## Known Limitations
 
 | Limitation | Reason |
@@ -337,8 +347,7 @@ Links character GUID to AI type.
 | PvP combat | No player-vs-player logic |
 | Professions | Not implemented |
 | Questing | No quest tracking |
-| Use consumables | Resting uses cheat regen |
 
 ---
 
-*Last Updated: 2026-01-31*
+*Last Updated: 2026-02-01*

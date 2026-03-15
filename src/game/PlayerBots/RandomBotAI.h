@@ -117,7 +117,6 @@ private:
 
     // Resting state (for BotCheats::HandleResting)
     bool m_isResting = false;
-    uint32 m_restingTickTimer = 0;
 
     // Invalid position recovery (for falling through floor detection)
     uint32 m_invalidPosCount = 0;

@@ -11,21 +11,25 @@
 #include "Group/Group.h"
 #include "ObjectAccessor.h"
 #include "UnitDefines.h"
+#include "Spells/SpellMgr.h"
+#include "MotionMaster.h"
 
-bool BotCheats::HandleResting(Player* bot, uint32 diff, bool& isResting, uint32& tickTimer)
+bool BotCheats::HandleResting(Player* bot, bool& isResting)
 {
     if (!bot || !bot->IsAlive())
         return false;
 
+    bool isEating = bot->HasAura(SPELL_FOOD);
+    bool isDrinking = bot->HasAura(SPELL_DRINK);
+
     // If we can't rest (in combat or group in combat), stop resting immediately
     if (!CanRest(bot))
     {
-        if (isResting)
-        {
-            isResting = false;
-            tickTimer = 0;
-            bot->SetStandState(UNIT_STAND_STATE_STAND);
-        }
+        if (isEating)
+            bot->RemoveAurasDueToSpell(SPELL_FOOD);
+        if (isDrinking)
+            bot->RemoveAurasDueToSpell(SPELL_DRINK);
+        isResting = false;
         return false;
     }
 
@@ -36,58 +40,64 @@ bool BotCheats::HandleResting(Player* bot, uint32 diff, bool& isResting, uint32&
     if (bot->GetMaxPower(POWER_MANA) > 0)
         manaPercent = bot->GetPowerPercent(POWER_MANA);
 
-    // Currently resting - check if we should stop
-    if (isResting)
+    // Check if we should stop resting (both resources above threshold)
+    if (hpPercent >= RESTING_STOP_THRESHOLD && manaPercent >= RESTING_STOP_THRESHOLD)
     {
-        // Stop if HP and mana are both above threshold
-        if (hpPercent >= RESTING_STOP_THRESHOLD && manaPercent >= RESTING_STOP_THRESHOLD)
-        {
-            isResting = false;
-            tickTimer = 0;
-            bot->SetStandState(UNIT_STAND_STATE_STAND);
-            return false;
-        }
-
-        // Continue resting - apply regen on tick
-        if (tickTimer <= diff)
-        {
-            tickTimer = RESTING_TICK_INTERVAL;
-
-            // Regen HP if below max
-            if (hpPercent < 100.0f)
-            {
-                uint32 hpRegen = (bot->GetMaxHealth() * RESTING_REGEN_PERCENT) / 100;
-                bot->ModifyHealth(hpRegen);
-            }
-
-            // Regen mana if below max and bot uses mana
-            if (manaPercent < 100.0f && bot->GetMaxPower(POWER_MANA) > 0)
-            {
-                uint32 manaRegen = (bot->GetMaxPower(POWER_MANA) * RESTING_REGEN_PERCENT) / 100;
-                bot->ModifyPower(POWER_MANA, manaRegen);
-            }
-        }
-        else
-        {
-            tickTimer -= diff;
-        }
-
-        return true; // Still resting
+        if (isEating)
+            bot->RemoveAurasDueToSpell(SPELL_FOOD);
+        if (isDrinking)
+            bot->RemoveAurasDueToSpell(SPELL_DRINK);
+        isResting = false;
+        return false;
     }
 
-    // Not currently resting - check if we should start
+    // Check if we need to eat (HP below threshold and not already eating)
     bool needsHpRegen = hpPercent < RESTING_HP_START_THRESHOLD;
     bool needsManaRegen = (bot->GetMaxPower(POWER_MANA) > 0) && (manaPercent < RESTING_MANA_START_THRESHOLD);
 
-    if (needsHpRegen || needsManaRegen)
+    // Also continue eating/drinking if we have the aura but haven't reached stop threshold
+    if (isEating && hpPercent < RESTING_STOP_THRESHOLD)
+        needsHpRegen = true;
+    if (isDrinking && manaPercent < RESTING_STOP_THRESHOLD)
+        needsManaRegen = true;
+
+    if (needsHpRegen && !isEating)
     {
+        // Stop movement before eating
+        if (bot->GetMotionMaster()->GetCurrentMovementGeneratorType())
+        {
+            bot->StopMoving();
+            bot->GetMotionMaster()->Clear(false, true);
+            bot->GetMotionMaster()->MoveIdle();
+        }
+        if (SpellEntry const* pSpellEntry = sSpellMgr.GetSpellEntry(SPELL_FOOD))
+        {
+            bot->CastSpell(bot, pSpellEntry, true);
+            bot->RemoveSpellCooldown(*pSpellEntry);
+        }
         isResting = true;
-        tickTimer = RESTING_TICK_INTERVAL;
-        bot->SetStandState(UNIT_STAND_STATE_SIT);
-        return true;
     }
 
-    return false;
+    if (needsManaRegen && !isDrinking)
+    {
+        // Stop movement before drinking
+        if (bot->GetMotionMaster()->GetCurrentMovementGeneratorType())
+        {
+            bot->StopMoving();
+            bot->GetMotionMaster()->Clear(false, true);
+            bot->GetMotionMaster()->MoveIdle();
+        }
+        if (SpellEntry const* pSpellEntry = sSpellMgr.GetSpellEntry(SPELL_DRINK))
+        {
+            bot->CastSpell(bot, pSpellEntry, true);
+            bot->RemoveSpellCooldown(*pSpellEntry);
+        }
+        isResting = true;
+    }
+
+    // Update resting state based on current auras
+    isResting = bot->HasAura(SPELL_FOOD) || bot->HasAura(SPELL_DRINK);
+    return isResting;
 }
 
 bool BotCheats::CanRest(Player* bot)

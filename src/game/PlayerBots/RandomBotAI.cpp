@@ -381,9 +381,9 @@ void RandomBotAI::UpdateAI(uint32 const diff)
     }
     m_wasInCombat = inCombat;
 
-    // Handle resting (cheat: no food/drink items needed)
+    // Handle resting (uses food/drink spells for natural regen with animations)
     // This must be checked early - if combat starts while resting, bot stands up
-    if (BotCheats::HandleResting(me, RB_UPDATE_INTERVAL, m_isResting, m_restingTickTimer))
+    if (BotCheats::HandleResting(me, m_isResting))
         return;  // Busy resting
 
     // Combat logic
@@ -409,7 +409,6 @@ void RandomBotAI::ResetBehaviors()
     m_looting.Reset();
     m_wasInCombat = false;
     m_isResting = false;
-    m_restingTickTimer = 0;
 }
 
 // ============================================================================

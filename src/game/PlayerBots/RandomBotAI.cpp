@@ -31,6 +31,7 @@
 #include "SpellAuras.h"
 #include "MotionMaster.h"
 #include "Log.h"
+#include "Config/Config.h"
 #include <cmath>
 
 #define RB_UPDATE_INTERVAL 1000
@@ -48,9 +49,12 @@ RandomBotAI::RandomBotAI()
 {
     m_updateTimer.Reset(1000);
 
-    // Weighted activity assignment: 30% questing, 70% grinding
-    // Phase Q12 will make this configurable
-    if (urand(1, 100) <= 30)
+    // Weighted activity assignment — configurable via mangosd.conf
+    // RandomBot.QuestingPercent = 0-100, default 70 (70% questing, 30% grinding)
+    uint32 questingPercent = sConfig.GetIntDefault("RandomBot.QuestingPercent", 70);
+    if (questingPercent > 100) questingPercent = 100;
+
+    if (urand(1, 100) <= questingPercent)
         m_currentActivity = std::make_unique<QuestingActivity>();
     else
         m_currentActivity = std::make_unique<GrindingActivity>();

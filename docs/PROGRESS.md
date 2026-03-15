@@ -18,10 +18,50 @@
 
 ### Active Bugs
 - Bug #12: Hunter Auto Shot cooldown spam (Low Priority - cosmetic)
-- Bug #19: Paladin Judgement casts spell ID 0 (Medium Priority)
+- Bug #19: Paladin Judgement spell ID 0 — partially fixed (Seal re-apply + guard added, still fires in some cases)
+- Bug #21: `_SaveInventory` null item pointer — cosmetic log spam, no crash/data loss. Root cause unclear.
 - See `docs/Quest_Implementation/KNOWN_ISSUES.md` for questing-specific bugs
 
 ### For older session logs, see `docs/archive/PROGRESS_ARCHIVE.md`
+
+---
+
+## 2026-03-15 - Bug Fix Session: Server Log Analysis & Fixes
+
+### What Happened
+Analyzed Server.log across 3 test runs (35min, 42min, 51min with 100 bots each). Identified 5 bugs from log data, fixed all of them. Three confirmed fully resolved, two partially fixed (cosmetic log spam remains).
+
+### Bugs Fixed
+
+| Bug | Before | After | Status |
+|-----|--------|-------|--------|
+| Quest giver bouncing (entry 713) | 1,151 trips | 28 trips | **FIXED** (97% reduction) |
+| GO item loot loop (Cactus Apple) | 328 stuck interactions | 0 spam, proper relocations | **FIXED** |
+| Vendor repair infinite loop | 46 triggers, never repairs | 7 triggers, 54 repairs | **FIXED** |
+| Paladin spell ID 0 | 32 errors | 188 errors | **Partially fixed** — needs deeper investigation |
+| `_SaveInventory` null pointer | 62 errors | 407 errors | **Partially fixed** — vendoring sell pattern corrected, other sources remain |
+
+### Changes Made
+
+**QuestingActivity.h/cpp** — Exhausted giver tracking:
+- After visiting a giver and accepting 0 quests, marks it exhausted (5-min cooldown, clears on level-up)
+- `FindNearestQuestGiver` now skips exhausted entries via optional skip set
+- GO arrival code now checks `CanInteractWith` before looting — if GO is despawned/not interactable, immediately relocates instead of looping
+
+**BotQuestCache.h/cpp** — `FindNearestQuestGiver` accepts optional `skipEntries` set
+
+**BotObjectInteraction.cpp** — GO loot overhaul:
+- Changed `LOOT_SKINNING` → `LOOT_CORPSE` (matches real client flow)
+- Force `unlootedCount=0` after `AutoStoreLoot` so GOs properly despawn and respawn
+- Added diagnostic logging for loot state debugging
+
+**VendoringStrategy.cpp** — Sell + repair fixes:
+- Sell: replaced `RemoveItem` with real sell handler pattern (`ItemRemovedQuestCheck` → `RemoveItem` → `RemoveFromUpdateQueueOf` → `AddItemToBuyBackSlot`)
+- Repair: `DurabilityRepairAll(false)` — free repairs, no more silent money-check failure
+
+**PaladinCombat.cpp** — Seal management in combat:
+- Re-apply Seal at top of `UpdateCombat` if missing
+- Block Judgement unless Seal aura is active
 
 ---
 

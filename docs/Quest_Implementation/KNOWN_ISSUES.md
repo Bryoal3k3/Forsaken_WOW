@@ -1,24 +1,18 @@
 # Questing System - Known Issues & Untested Features
 
-**Last Updated**: 2026-03-15
+**Last Updated**: 2026-03-15 (Bug Fix Session)
 
 ---
 
 ## Known Bugs
 
-### Bug 1: GO Item Looting Not Working
-**Severity**: High
-**Affects**: Any quest requiring items from gameobjects (Cactus Apples, herb quest items, etc.)
-**Symptom**: Bot travels to gameobject, calls LootObject, log says "looted quest item from Cactus Apple" but item count never increases. Bot keeps cycling to same GO.
-**Root Cause**: `SendLoot` + `AutoStoreLoot` approach isn't giving quest items. Possibly wrong loot type passed to SendLoot, or loot generation requires a different flow for gameobjects vs creatures.
-**Files**: `BotObjectInteraction.cpp` → `LootObject()`
+### Bug 1: GO Item Looting Not Working — RESOLVED
+**Severity**: High → **RESOLVED (2026-03-15)**
+**Fix**: Changed `LOOT_SKINNING` → `LOOT_CORPSE` in `BotObjectInteraction::LootObject`. Force `unlootedCount=0` after `AutoStoreLoot` so GO properly despawns/respawns. Added `CanInteractWith` gate in `QuestingActivity` — if GO not interactable, relocate to different spawn instead of looping. Result: 328 spam interactions → 0, quests completing normally.
 
-### Bug 2: Quest Giver Bouncing (Non-Actionable Quests)
-**Severity**: Medium
-**Affects**: Bots with quests that have no kill/collect/GO/explore objectives
-**Symptom**: Bots cycle between "traveling to quest giver" and "arrived" every 2 seconds. Examples: Dwarves at entry 713, Night Elves at entry 3514, Tauren at entry 3209.
-**Root Cause**: `HandleSelectingQuest` finds no actionable objectives but the bot has incomplete quests AND free quest log slots, so it goes to `FINDING_QUEST_GIVER` instead of `NO_QUESTS_AVAILABLE`. The fix for this was applied but doesn't cover all cases — some quest types (talk-to-NPC, escort, etc.) still have no handler.
-**Files**: `QuestingActivity.cpp` → `HandleSelectingQuest()`
+### Bug 2: Quest Giver Bouncing — RESOLVED
+**Severity**: Medium → **RESOLVED (2026-03-15)**
+**Fix**: Exhausted giver tracking in `QuestingActivity`. After visiting a giver and accepting 0 quests, entry is marked exhausted and skipped in future `FindNearestQuestGiver` searches (5-min cooldown, clears on level-up). Result: 1,151 trips → 28 (97% reduction).
 
 ### Bug 3: Grumdu-Type Permanent Stuck
 **Severity**: Low (not questing-specific)
@@ -96,10 +90,10 @@ Requires party system. Deferred to future.
 
 ## Priority for Next Session
 
-1. **Fix Bug 1** (GO item looting) — blocks all gameobject-item quests
-2. **Fix Bug 2** (bouncing) — affects many Dwarf/NE/Tauren bots
-3. **Test items 1-3** (exploration, source items, GO objectives)
-4. **Implement Limitation 1** (talk-to-NPC quests) — would fix most of Bug 2
+1. **Test items 1-3** (exploration, source items, GO objectives)
+2. **Implement Limitation 1** (talk-to-NPC quests)
+3. **Investigate Paladin spell ID 0** — Seal guard not fully preventing it
+4. **Investigate _SaveInventory null pointer** — not caused by vendoring, root cause unknown
 
 ---
 

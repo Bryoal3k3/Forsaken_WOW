@@ -24,6 +24,7 @@
 #include "DBCStructure.h"
 #include "ObjectDefines.h"
 #include "Formulas.h"
+#include "ItemPrototype.h"
 #include <cmath>
 #include <cfloat>
 
@@ -1103,27 +1104,63 @@ bool QuestingActivity::TurnInQuest(Player* pBot, Creature* pNPC, uint32 questId)
     if (!pBot->CanRewardQuest(pQuest, true))
         return false;
 
-    // Select reward (simple class-based heuristic for now)
-    // Phase Q11 will add BotStatWeights for better selection
+    // Select best reward based on class stat preferences
     uint32 rewardChoice = 0;
-    uint32 rewardCount = 0;
+    float bestScore = -1.0f;
+    uint8 botClass = pBot->GetClass();
+
     for (uint32 i = 0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
     {
-        if (pQuest->RewChoiceItemId[i] != 0)
-            rewardCount++;
-    }
+        uint32 itemId = pQuest->RewChoiceItemId[i];
+        if (itemId == 0)
+            continue;
 
-    if (rewardCount > 0)
-    {
-        // For now, just pick the first available reward
-        // Phase Q11 will score items properly
-        for (uint32 i = 0; i < QUEST_REWARD_CHOICES_COUNT; ++i)
+        ItemPrototype const* proto = sObjectMgr.GetItemPrototype(itemId);
+        if (!proto)
+            continue;
+
+        // Score item based on class stat preferences
+        float score = 0.0f;
+        for (int s = 0; s < MAX_ITEM_PROTO_STATS; ++s)
         {
-            if (pQuest->RewChoiceItemId[i] != 0)
+            int32 value = proto->ItemStat[s].ItemStatValue;
+            if (value <= 0)
+                continue;
+
+            switch (proto->ItemStat[s].ItemStatType)
             {
-                rewardChoice = i;
-                break;
+                case ITEM_MOD_STRENGTH:
+                    if (botClass == CLASS_WARRIOR || botClass == CLASS_PALADIN)
+                        score += value * 2.0f;
+                    break;
+                case ITEM_MOD_AGILITY:
+                    if (botClass == CLASS_ROGUE || botClass == CLASS_HUNTER)
+                        score += value * 2.0f;
+                    else if (botClass == CLASS_DRUID || botClass == CLASS_SHAMAN)
+                        score += value * 1.0f;
+                    break;
+                case ITEM_MOD_INTELLECT:
+                    if (botClass == CLASS_MAGE || botClass == CLASS_WARLOCK || botClass == CLASS_PRIEST)
+                        score += value * 2.0f;
+                    else if (botClass == CLASS_DRUID || botClass == CLASS_SHAMAN || botClass == CLASS_PALADIN)
+                        score += value * 1.0f;
+                    break;
+                case ITEM_MOD_STAMINA:
+                    score += value * 0.5f;  // Everyone likes stamina
+                    break;
+                default:
+                    break;
             }
+        }
+
+        // Fallback: if no stats, use sell price as tiebreaker
+        if (score == 0.0f)
+            score = static_cast<float>(proto->SellPrice) * 0.001f;
+
+        if (score > bestScore)
+        {
+            bestScore = score;
+            rewardChoice = i;
         }
     }
 
